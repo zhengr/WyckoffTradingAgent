@@ -62,9 +62,9 @@ jobs:
       name: cloudflare-production
       url: https://wyckoff-api.yongkai-wang.workers.dev/api/health
     env:
-      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID || '6e64f92dd0779528d2a5ca8498ab5654' }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID || '' }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      API_BASE_URL: https://wyckoff-api.yongkai-wang.workers.dev
+      API_BASE_URL: https://wyckoff-api.zhengr.workers.dev
       DEPLOY_SHA: ${{ needs.changes.outputs.sha }}
     steps:
       - uses: actions/checkout@v7
