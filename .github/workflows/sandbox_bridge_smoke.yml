@@ -1,0 +1,28 @@
+name: Sandbox bridge smoke
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Signed bridge probe
+        env:
+          SANDBOX_BRIDGE_SECRET: ${{ secrets.SANDBOX_BRIDGE_SECRET }}
+        run: |
+          BODY=$(jq -nc --arg s "print('smoke-ok')" '{script: $s, timeout: 20000}')
+          TS=$(date +%s000)
+          SIG=$(printf '%s' "$TS.$BODY" | openssl dgst -sha256 -hmac "$SANDBOX_BRIDGE_SECRET" -hex | sed 's/^.*= //')
+          HTTP=$(curl -sS -o resp.json -w '%{http_code}' --max-time 120 \
+            -X POST https://wyckoff-agent-sandbox-nine.vercel.app/api/sandbox-run \
+            -H 'Content-Type: application/json' \
+            -H "X-Wyckoff-Timestamp: $TS" \
+            -H "X-Wyckoff-Signature: $SIG" \
+            -d "$BODY")
+          echo "HTTP $HTTP"
+          jq -c '{exitCode, stdout, stderr: (.stderr // "" | .[0:120]), activeCpuUsageMs}' resp.json || cat resp.json
+          test "$HTTP" = 200
