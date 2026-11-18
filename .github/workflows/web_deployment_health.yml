@@ -22,8 +22,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 8
     env:
-      API_HEALTH_URL: https://wyckoff-api.yongkai-wang.workers.dev/api/health
-      API_REMOTE_URL: https://wyckoff-api.yongkai-wang.workers.dev/api/remote/devices
+      API_HEALTH_URL: https://wyckoff-api.zhengr.workers.dev/api/health
+      API_REMOTE_URL: https://wyckoff-api.zhengr.workers.dev/api/remote/devices
       CHAT_URL: https://wyckoff-analysis.pages.dev/chat
     steps:
       - name: Wait for production endpoints
