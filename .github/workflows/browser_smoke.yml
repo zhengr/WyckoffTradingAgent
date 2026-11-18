@@ -14,38 +14,32 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 22
-      - name: Install playwright
-        run: npm i -g playwright@1.49.0 && playwright install --with-deps chromium
-      - name: Visit page and dump console
+      - name: Install playwright and run checks
         run: |
-          cat > /tmp/check.mjs << 'EOF'
+          mkdir -p /tmp/pw && cd /tmp/pw && npm init -y > /dev/null && npm i playwright@1.49.0 > /dev/null 2>&1
+          npx playwright install --with-deps chromium > /dev/null 2>&1
+          cat > /tmp/pw/check.mjs << 'EOF'
           import { chromium } from 'playwright';
-          const browser = await chromium.launch();
-          const page = await browser.newPage();
-          const errors = [];
-          page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()) });
-          page.on('pageerror', (e) => errors.push('PAGEERROR: ' + e.message));
-          await page.goto('https://wyckoff-analysis-dyj.pages.dev/', { waitUntil: 'networkidle', timeout: 45000 });
-          await page.waitForTimeout(3000);
-          const rootHtml = await page.evaluate(() => document.getElementById('root')?.innerHTML.length || 0);
-          const title = await page.title();
-          const bodyText = (await page.evaluate(() => document.body.innerText)).slice(0, 200);
-          console.log(JSON.stringify({ title, rootHtmlLength: rootHtml, bodyText, errors }, null, 2));
-          await browser.close();
+          async function probe(url) {
+            const browser = await chromium.launch();
+            const page = await browser.newPage();
+            const errors = [];
+            page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text().slice(0, 300)) });
+            page.on('pageerror', (e) => errors.push('PAGEERROR: ' + e.message.slice(0, 300)));
+            let status = 'ok';
+            try {
+              await page.goto(url, { waitUntil: 'networkidle', timeout: 45000 });
+            } catch (e) { status = 'nav-failed: ' + e.message.slice(0, 200) }
+            await page.waitForTimeout(3000);
+            const out = await page.evaluate(() => ({
+              title: document.title,
+              rootLen: document.getElementById('root')?.innerHTML.length || 0,
+              text: document.body.innerText.slice(0, 300),
+            }));
+            await browser.close();
+            return { url, status, ...out, errors };
+          }
+          console.log(JSON.stringify(await probe('https://wyckoff-analysis-dyj.pages.dev/'), null, 2));
+          console.log(JSON.stringify(await probe('https://wyckoff-analysis-dyj.pages.dev/login'), null, 2));
           EOF
-          node /tmp/check.mjs
-          echo "--- /login ---"
-          cat > /tmp/check2.mjs << 'EOF'
-          import { chromium } from 'playwright';
-          const browser = await chromium.launch();
-          const page = await browser.newPage();
-          const errors = [];
-          page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()) });
-          page.on('pageerror', (e) => errors.push('PAGEERROR: ' + e.message));
-          await page.goto('https://wyckoff-analysis-dyj.pages.dev/login', { waitUntil: 'networkidle', timeout: 45000 });
-          await page.waitForTimeout(2000);
-          const rootHtml = await page.evaluate(() => document.getElementById('root')?.innerHTML.length || 0);
-          console.log(JSON.stringify({ rootHtmlLength: rootHtml, errors }, null, 2));
-          await browser.close();
-          EOF
-          node /tmp/check2.mjs
+          node /tmp/pw/check.mjs
