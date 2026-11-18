@@ -11,7 +11,7 @@ head_sampling_rate = 1
 [observability.logs]
 invocation_logs = true
 
-# 只记 provider/model/成功与否/耗时，不记用户 ID 或对话内容——和 Workers Logs 的既有口径一致。
+
 [[analytics_engine_datasets]]
 binding = "LLM_USAGE_ANALYTICS"
 dataset = "wyckoff_llm_usage"
@@ -26,7 +26,7 @@ AGENT_RUN_TTL_SECONDS = "3600"
 AGENT_RUN_DAILY_LIMIT_PER_USER = "20"
 AGENT_RUN_DAILY_CPU_LIMIT_MS = "120000"
 AGENT_RUN_MIN_INTERVAL_MS = "10000"
-SANDBOX_BRIDGE_URL = "https://wyckoff-agent-sandbox.vercel.app/api/sandbox-run"
+SANDBOX_BRIDGE_URL = "https://wyckoff-agent-sandbox-nine.vercel.app/api/sandbox-run"
 
 [[durable_objects.bindings]]
 name = "AGENT_RUN_NOTIFIER"
