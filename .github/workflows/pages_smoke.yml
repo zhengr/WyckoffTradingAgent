@@ -1,0 +1,25 @@
+name: Pages smoke
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Pages + Worker chain
+        run: |
+          BASE=https://wyckoff-analysis-dyj.pages.dev
+          echo "--- home page ---"
+          curl -sS --max-time 20 "$BASE/" | grep -o '<div id="root"' || echo "FAIL root div"
+          echo "--- SPA routes (chat) ---"
+          curl -sS -o /dev/null -w 'chat: %{http_code}\n' --max-time 20 "$BASE/chat"
+          echo "--- /api/health (proxy to zhengr worker) ---"
+          curl -sS --max-time 20 "$BASE/api/health"; echo
+          echo "--- /api/remote/devices (expect 401) ---"
+          curl -sS -o /dev/null -w 'remote: %{http_code}\n' --max-time 20 "$BASE/api/remote/devices"
+          echo "--- llm-proxy guard (expect 403/400) ---"
+          curl -sS -o /dev/null -w 'llm-proxy: %{http_code}\n' --max-time 20 "$BASE/api/llm-proxy/x"
