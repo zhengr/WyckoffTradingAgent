@@ -1,0 +1,67 @@
+name: Pages deploy
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "web/**"
+      - "data/market_universes/**"
+      - "data/stock_list_cache.json"
+      - ".github/workflows/pages_deploy.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages-deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment:
+      name: cloudflare-production
+      url: https://wyckoff-analysis-dyj.pages.dev
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID || '' }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Check deployment credential
+        run: |
+          if [[ -z "$CLOUDFLARE_API_TOKEN" ]]; then
+            echo "CLOUDFLARE_API_TOKEN is not configured for cloudflare-production." >&2
+            exit 1
+          fi
+      - uses: pnpm/action-setup@v4.4.0
+        with:
+          version: 10.33.2
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      - name: Install locked dependencies
+        working-directory: web
+        run: pnpm install --frozen-lockfile
+      - name: Build web app
+        working-directory: web
+        run: pnpm --filter @wyckoff/web build
+      - name: Build Pages Functions worker bundle
+        working-directory: web
+        run: >-
+          pnpm --filter @wyckoff/api exec wrangler pages functions build
+          "$GITHUB_WORKSPACE/web/functions"
+          --project-directory "$GITHUB_WORKSPACE/web"
+          --outdir "$RUNNER_TEMP/wyckoff-pages-functions"
+      - name: Assemble deployment directory
+        run: cp "$RUNNER_TEMP/wyckoff-pages-functions/index.js" web/apps/web/dist/_worker.js
+      - name: Deploy to Cloudflare Pages
+        run: >-
+          pnpm --filter @wyckoff/api exec wrangler pages deploy
+          web/apps/web/dist
+          --project-name wyckoff-analysis
+          --branch main
+          --commit-dirty true
