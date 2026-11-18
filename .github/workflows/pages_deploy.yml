@@ -59,9 +59,10 @@ jobs:
       - name: Assemble deployment directory
         run: cp "$RUNNER_TEMP/wyckoff-pages-functions/index.js" web/apps/web/dist/_worker.js
       - name: Deploy to Cloudflare Pages
+        working-directory: web
         run: >-
           pnpm --filter @wyckoff/api exec wrangler pages deploy
-          web/apps/web/dist
+          "$GITHUB_WORKSPACE/web/apps/web/dist"
           --project-name wyckoff-analysis
           --branch main
           --commit-dirty true
