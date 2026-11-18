@@ -60,7 +60,7 @@ jobs:
     timeout-minutes: 15
     environment:
       name: cloudflare-production
-      url: https://wyckoff-api.yongkai-wang.workers.dev/api/health
+      url: https://wyckoff-api.zhengr.workers.dev/api/health
     env:
       CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID || '' }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
