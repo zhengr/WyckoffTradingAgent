@@ -48,6 +48,9 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Build web app
         working-directory: web
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
         run: pnpm --filter @wyckoff/web build
       - name: Build Pages Functions worker bundle
         working-directory: web
