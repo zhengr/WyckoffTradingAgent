@@ -68,3 +68,14 @@ jobs:
           rows = r.json()
           print('SINA_OK rows=%d last=%s' % (len(rows), rows[-1]))
           EOF
+      - name: Probe tdx package
+        continue-on-error: true
+        run: |
+          python - << 'EOF'
+          import requests, io, zipfile, struct
+          r = requests.get('https://www.tdx.com.cn/products/data/data/g4day/20261118.zip', timeout=60, headers={'User-Agent': 'Mozilla/5.0'})
+          assert r.content[:2] == b'PK', 'not a zip'
+          z = zipfile.ZipFile(io.BytesIO(r.content))
+          cod = z.read('sh261118.cod')
+          print('TDX_PACKAGE_OK size=%d sh_codes=%d' % (len(r.content), len(cod)//150))
+          EOF

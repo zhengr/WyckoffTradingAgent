@@ -9,6 +9,7 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FuturesTimeoutError
+from datetime import timedelta
 from typing import Any
 
 import pandas as pd
@@ -60,13 +61,63 @@ def fetch_stock_spot_snapshot(
 
 
 def fetch_spot_dataframe():
+    """全市场快照：东财（akshare）优先，失败回退通达信官网盘后包。
+
+    东财 spot 接口在海外 IP 常被连接级风控掐断；通达信盘后包走 HTTP 官方域名，
+    海外可达且自带成交额，是海外 CI 里唯一能拿到全市场 close/volume/amount 的来源。
+    """
+    try:
+        df = _fetch_spot_eastmoney()
+        if df is not None and not df.empty:
+            return df
+        raise RuntimeError("spot snapshot empty")
+    except Exception as exc:
+        _debug_spot_fail("spot_eastmoney", exc)
+        logger.info("spot eastmoney failed (%s), fallback to tdx package", str(exc)[:120])
+        if env_flag("DATA_SOURCE_DISABLE_TDX_PACKAGE"):
+            raise
+        return _fetch_spot_tdx()
+
+
+def _fetch_spot_eastmoney():
     import akshare as ak
 
     with ThreadPoolExecutor(max_workers=1) as executor:
         future = executor.submit(ak.stock_zh_a_spot_em)
-        df = future.result(timeout=max(SPOT_SNAPSHOT_TIMEOUT_SECONDS, 1.0))
-    if df is None or df.empty:
-        raise RuntimeError("spot snapshot empty")
+        return future.result(timeout=max(SPOT_SNAPSHOT_TIMEOUT_SECONDS, 1.0))
+
+
+def _fetch_spot_tdx():
+    """通达信盘后包 → 现有 parse_spot_dataframe 期望的列（中文列名）。"""
+    from integrations.data_source_tdx import fetch_tdx_daily_snapshot, recent_trade_day
+
+    last_error: Exception | None = None
+    for back in range(4):  # 当天包未发布时往前找最近几个工作日
+        day = recent_trade_day() - timedelta(days=back)
+        if day.weekday() >= 5:
+            continue
+        try:
+            rows = fetch_tdx_daily_snapshot(day)
+            break
+        except ValueError as exc:
+            last_error = exc
+            continue
+    else:
+        raise RuntimeError(f"通达信盘后包最近几日均不可用: {last_error}")
+    df = pd.DataFrame(rows)
+    # 映射到 _append_spot_row / _spot_code_column 认识的中文字段
+    df = df.rename(columns={
+        "code": "代码",
+        "open": "今开",
+        "high": "最高",
+        "low": "最低",
+        "close": "最新价",
+        "volume": "成交量",
+        "amount": "成交额",
+        "prev_close": "昨收",
+    })
+    df["涨跌幅"] = (df["最新价"] / df["昨收"] - 1.0) * 100.0
+    logger.info("spot fallback: tdx package day=%s rows=%d", day, len(df))
     return df
 
 
