@@ -30,6 +30,26 @@ describe('fetchKlineWithQuality', () => {
     expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/api/kline?'))
   })
 
+
+  it('returns unadjusted rows for BSE stocks when tushare adj_factor is empty', async () => {
+    // 北交所（92xxxx）tushare daily 有数据，但 adj_factor 常为空/限频——不应因此整体返回空
+    vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+      if (url.includes('/api/llm-proxy/')) {
+        const body = String(init?.body ?? '')
+        const isAdj = body.includes('adj_factor')
+        return Promise.resolve({ ok: true, json: async () => (isAdj
+          ? { code: 0, data: { fields: ['trade_date', 'adj_factor'], items: [] } }
+          : { code: 0, data: { fields: ['trade_date', 'open', 'high', 'low', 'close', 'vol'], items: [['20261118', 30.0, 30.0, 27.98, 28.16, 8201.7]] } }) })
+      }
+      return Promise.resolve({ ok: false, json: async () => ({}) })
+    }))
+
+    const { data, quality } = await fetchKlineWithQuality('920029', { tushare: 'tok' }, 'user1')
+    expect(quality.source).toBe('tushare')
+    expect(data).toHaveLength(1)
+    expect(data[0].close).toBeCloseTo(28.16) // 不复权原价
+  })
+
   it('throws a neutral error when all sources fail', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, json: () => Promise.resolve({}) }))
 

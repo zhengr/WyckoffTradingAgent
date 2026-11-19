@@ -29,13 +29,16 @@ export async function fetchKlineViaTushare(code: string, token: string, startDat
   if (!Array.isArray(items) || items.length === 0) return []
 
   const adjItems = adjJson?.data?.items
-  if (!Array.isArray(adjItems) || adjItems.length === 0) return []
+  // 北交所/新股等可能没有复权因子记录（或接口限频返回空）：按不复权处理（ratio=1），
+  // 不能因此整体返回空，否则整条 Tushare 链对该标的失效。
   const adjMap = new Map<string, number>()
   let latestDate = ''
-  for (const row of adjItems) {
-    const dt = String(row[0])
-    adjMap.set(dt, Number(row[1]))
-    if (dt > latestDate) latestDate = dt
+  if (Array.isArray(adjItems) && adjItems.length > 0) {
+    for (const row of adjItems) {
+      const dt = String(row[0])
+      adjMap.set(dt, Number(row[1]))
+      if (dt > latestDate) latestDate = dt
+    }
   }
   const latestFactor = adjMap.get(latestDate) || 1
 
