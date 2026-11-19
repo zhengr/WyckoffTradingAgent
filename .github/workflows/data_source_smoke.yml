@@ -1,0 +1,60 @@
+name: Data source smoke
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        source: [akshare, baostock, efinance, tushare]
+    steps:
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - name: Install
+        run: pip install -q "akshare==1.18.64" baostock efinance requests
+      - name: Probe ${{ matrix.source }}
+        env:
+          TUSHARE_TOKEN: ${{ secrets.TUSHARE_TOKEN }}
+        run: |
+          case "${{ matrix.source }}" in
+            akshare)
+              python -c "
+              import akshare as ak
+              df = ak.stock_zh_a_hist(symbol='600519', start_date='20261101', end_date='20261118', adjust='qfq')
+              print('AKSHARE_OK rows=%d last=%s' % (len(df), df.iloc[-1]['收盘']))
+              ";;
+            baostock)
+              python -c "
+              import baostock as bs
+              lg = bs.login()
+              assert lg.error_code == '0', lg.error_msg
+              rs = bs.query_history_k_data_plus('sh.600519', 'date,code,close', start_date='2026-11-01', end_date='2026-11-18', frequency='d', adjustflag='2')
+              rows = []
+              while rs.error_code == '0' and rs.next():
+                  rows.append(rs.get_row_data())
+              bs.logout()
+              print('BAOSTOCK_OK rows=%d last=%s' % (len(rows), rows[-1] if rows else None))
+              ";;
+            efinance)
+              python -c "
+              import efinance as ef
+              df = ef.stock.get_quote_history('600519')
+              print('EFINANCE_OK rows=%d last_close=%s' % (len(df), df.iloc[-1]['收盘'] if len(df) else None))
+              ";;
+            tushare)
+              python -c "
+              import os, requests, json
+              r = requests.post('https://api.tushare.pro', json={'api_name':'daily','token':os.environ['TUSHARE_TOKEN'],'params':{'ts_code':'600519.SH','start_date':'20261110','end_date':'20261118'},'fields':'trade_date,close'})
+              j = r.json()
+              assert j['code'] == 0, j.get('msg')
+              print('TUSHARE_OK rows=%d' % len(j['data']['items']))
+              ";;
+          esac
