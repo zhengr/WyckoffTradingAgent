@@ -1,0 +1,20 @@
+name: Kline API e2e2
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Hit worker directly AND via pages
+        run: |
+          echo "--- worker direct ---"
+          curl -sS --max-time 30 "https://wyckoff-api.zhengr.workers.dev/api/kline?code=600519&start=20261110&end=20261118" -o /tmp/w.json -w 'status=%{http_code}\n'
+          head -c 300 /tmp/w.json; echo
+          echo "--- pages proxy ---"
+          curl -sS --max-time 30 "https://wyckoff-analysis-dyj.pages.dev/api/kline?code=600519&start=20261110&end=20261118" -o /tmp/p.json -w 'status=%{http_code}\n'
+          head -c 300 /tmp/p.json; echo
