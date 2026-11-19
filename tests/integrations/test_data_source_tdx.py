@@ -15,7 +15,7 @@ def _make_cod(code: str, seq: int, name: str) -> bytes:
     rec = bytearray(150)
     rec[0:6] = code.encode("ascii")
     struct.pack_into("<H", rec, 32, seq)
-    rec[40:40 + len(name.encode("gbk"))] = name.encode("gbk")
+    rec[40 : 40 + len(name.encode("gbk"))] = name.encode("gbk")
     return bytes(rec)
 
 
@@ -32,8 +32,7 @@ def _build_fake_package(ymd: str, sh_codes: list[tuple[str, str]]) -> bytes:
     """构造最小合法包：凑够 sh 下限行数（10000），用重复的空价行填充。"""
     cod = b"".join(_make_cod(code, i, name) for i, (code, name) in enumerate(sh_codes))
     md1 = b"".join(
-        _make_md1(10.0, 10.0, 10.5, 9.8, 10.2 + (i % 10) * 0.01, 1000, 10200.0)
-        for i in range(len(sh_codes))
+        _make_md1(10.0, 10.0, 10.5, 9.8, 10.2 + (i % 10) * 0.01, 1000, 10200.0) for i in range(len(sh_codes))
     )
     # sz/bj 给下限以上的占位行
     sz_codes = [(f"{i:06d}", f"S{i}") for i in range(3000)]

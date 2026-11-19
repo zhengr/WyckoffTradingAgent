@@ -360,7 +360,9 @@ _ACTIVE_MEMBER = """exists (
   )"""
 
 
-def _policy(name: str, table: str, cmd: str, using: str | None = None, check: str | None = None, roles: str = "authenticated") -> str:
+def _policy(
+    name: str, table: str, cmd: str, using: str | None = None, check: str | None = None, roles: str = "authenticated"
+) -> str:
     clause = f" to {roles}"
     if using:
         clause += f" using ({using})"

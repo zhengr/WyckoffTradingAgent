@@ -66,8 +66,22 @@ def test_tencent_provider_rejects_empty_range(monkeypatch) -> None:
 
 def test_sina_provider_normalizes_rows_to_standard_columns(monkeypatch) -> None:
     rows = [
-        {"day": "2026-11-17", "open": "1450.000", "high": "1457.000", "low": "1445.000", "close": "1456.660", "volume": "2000000"},
-        {"day": "2026-11-18", "open": "1450.000", "high": "1456.000", "low": "1431.700", "close": "1442.660", "volume": "2984695"},
+        {
+            "day": "2026-11-17",
+            "open": "1450.000",
+            "high": "1457.000",
+            "low": "1445.000",
+            "close": "1456.660",
+            "volume": "2000000",
+        },
+        {
+            "day": "2026-11-18",
+            "open": "1450.000",
+            "high": "1456.000",
+            "low": "1431.700",
+            "close": "1442.660",
+            "volume": "2984695",
+        },
     ]
     captured: dict = {}
 
