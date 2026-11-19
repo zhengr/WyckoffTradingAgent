@@ -80,7 +80,7 @@ def _parse_package(content: bytes, ymd: str) -> list[dict]:
             raise RuntimeError(f"{market} 代码表与行情块条数对不上")
         before, codes, seqs = len(rows), set(), set()
         for offset in range(0, len(cod), 150):
-            record = cod[offset:offset + 150]
+            record = cod[offset : offset + 150]
             code = record[0:6].rstrip(b"\x00 ").decode("ascii", "replace")
             seq = struct.unpack("<H", record[32:34])[0]
             if not re.fullmatch(r"[0-9]{6}", code):
@@ -89,7 +89,7 @@ def _parse_package(content: bytes, ymd: str) -> list[dict]:
                 raise RuntimeError(f"通达信盘后包 {market} 代码/序号重复 ({code!r}, {seq})")
             codes.add(code)
             seqs.add(seq)
-            block = md1[seq * 512:(seq + 1) * 512]
+            block = md1[seq * 512 : (seq + 1) * 512]
             if len(block) != 512:
                 raise RuntimeError(f"{market}{code} 行情块越界")
             prev_close = struct.unpack("<d", block[4:12])[0]
@@ -107,19 +107,21 @@ def _parse_package(content: bytes, ymd: str) -> list[dict]:
                 raise RuntimeError(f"{market}{code} 名称非 GBK，文件损坏") from exc
             if not name:
                 raise RuntimeError(f"{market}{code} 有价格却无名称")
-            rows.append({
-                "date": f"{ymd[:4]}-{ymd[4:6]}-{ymd[6:]}",
-                "market": market,
-                "code": code,
-                "name": name,
-                "prev_close": round(prev_close, 4),
-                "open": round(open_, 4),
-                "high": round(high, 4),
-                "low": round(low, 4),
-                "close": round(close, 4),
-                "volume": volume,
-                "amount": round(amount, 2),
-            })
+            rows.append(
+                {
+                    "date": f"{ymd[:4]}-{ymd[4:6]}-{ymd[6:]}",
+                    "market": market,
+                    "code": code,
+                    "name": name,
+                    "prev_close": round(prev_close, 4),
+                    "open": round(open_, 4),
+                    "high": round(high, 4),
+                    "low": round(low, 4),
+                    "close": round(close, 4),
+                    "volume": volume,
+                    "amount": round(amount, 2),
+                }
+            )
         if len(rows) - before < TDX_MIN_PRICED[market]:
             raise RuntimeError(
                 f"通达信盘后包 {market} 只有 {len(rows) - before} 条有价记录"

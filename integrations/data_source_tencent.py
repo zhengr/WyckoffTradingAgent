@@ -22,7 +22,24 @@ _KLINE_URL = "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get"
 _TIMEOUT_SECONDS = float(os.getenv("TENCENT_TIMEOUT_SECONDS", "15"))
 _RETRY_TIMES = max(int(os.getenv("TENCENT_RETRY_TIMES", "2")), 1)
 
-_SH_PREFIX = ("600", "601", "603", "605", "688", "510", "511", "512", "513", "515", "516", "518", "560", "561", "562", "563")
+_SH_PREFIX = (
+    "600",
+    "601",
+    "603",
+    "605",
+    "688",
+    "510",
+    "511",
+    "512",
+    "513",
+    "515",
+    "516",
+    "518",
+    "560",
+    "561",
+    "562",
+    "563",
+)
 _BJ_PREFIX = ("43", "83", "87", "920")
 
 _HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
@@ -102,7 +119,7 @@ def _tencent_symbol(symbol: str) -> str:
     # 显式前缀
     for prefix in ("sh", "sz", "bj"):
         if raw.startswith(prefix):
-            digits = "".join(ch for ch in raw[len(prefix):] if ch.isdigit())
+            digits = "".join(ch for ch in raw[len(prefix) :] if ch.isdigit())
             return f"{prefix}{digits}"
     digits = "".join(ch for ch in raw.split(".")[0] if ch.isdigit())
     if digits.startswith(_BJ_PREFIX) and len(digits) == 6:

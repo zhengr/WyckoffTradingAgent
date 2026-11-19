@@ -16,15 +16,15 @@ from integrations.data_source_format import STOCK_HIST_COLUMNS
 
 logger = logging.getLogger(__name__)
 
-_KLINE_URL = (
-    "https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/"
-    "CN_MarketData.getKLineData"
-)
+_KLINE_URL = "https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/CN_MarketData.getKLineData"
 _TIMEOUT_SECONDS = float(os.getenv("SINA_TIMEOUT_SECONDS", "15"))
 _RETRY_TIMES = max(int(os.getenv("SINA_RETRY_TIMES", "2")), 1)
 _MAX_DATALEN = 1023
 
-_HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36", "Referer": "https://finance.sina.com.cn"}
+_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+    "Referer": "https://finance.sina.com.cn",
+}
 
 
 def fetch_stock_sina(symbol: str, start: str, end: str, adjust: str) -> pd.DataFrame:
@@ -71,7 +71,24 @@ def _sina_symbol(symbol: str) -> str:
 
 
 def _prefix_for(digits: str) -> str:
-    sh_prefix = ("600", "601", "603", "605", "688", "510", "511", "512", "513", "515", "516", "518", "560", "561", "562", "563")
+    sh_prefix = (
+        "600",
+        "601",
+        "603",
+        "605",
+        "688",
+        "510",
+        "511",
+        "512",
+        "513",
+        "515",
+        "516",
+        "518",
+        "560",
+        "561",
+        "562",
+        "563",
+    )
     if digits.startswith(sh_prefix) and len(digits) == 6:
         return f"sh{digits}"
     return f"sz{digits}"

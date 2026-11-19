@@ -106,16 +106,18 @@ def _fetch_spot_tdx():
         raise RuntimeError(f"通达信盘后包最近几日均不可用: {last_error}")
     df = pd.DataFrame(rows)
     # 映射到 _append_spot_row / _spot_code_column 认识的中文字段
-    df = df.rename(columns={
-        "code": "代码",
-        "open": "今开",
-        "high": "最高",
-        "low": "最低",
-        "close": "最新价",
-        "volume": "成交量",
-        "amount": "成交额",
-        "prev_close": "昨收",
-    })
+    df = df.rename(
+        columns={
+            "code": "代码",
+            "open": "今开",
+            "high": "最高",
+            "low": "最低",
+            "close": "最新价",
+            "volume": "成交量",
+            "amount": "成交额",
+            "prev_close": "昨收",
+        }
+    )
     df["涨跌幅"] = (df["最新价"] / df["昨收"] - 1.0) * 100.0
     logger.info("spot fallback: tdx package day=%s rows=%d", day, len(df))
     return df
