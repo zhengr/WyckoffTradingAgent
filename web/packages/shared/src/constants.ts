@@ -23,6 +23,7 @@ export const PROVIDER_BASE_URLS: Record<Provider, string> = {
 export const ALLOWED_MODEL_BASE_URLS = [
   PROVIDER_BASE_URLS['1route'],
   'https://www.1route.dev/v1',
+  'https://api.taoktao.com/v1',
   'https://generativelanguage.googleapis.com/v1beta/openai',
   PROVIDER_BASE_URLS.openai,
   PROVIDER_BASE_URLS.deepseek,
@@ -34,6 +35,7 @@ export const ALLOWED_MODEL_BASE_URLS = [
 export const ALLOWED_PROXY_TARGET_ORIGINS = [
   'https://api.1route.dev',
   'https://www.1route.dev',
+  'https://api.taoktao.com',
   'https://api.openai.com',
   'https://generativelanguage.googleapis.com',
   'https://api.deepseek.com',
@@ -48,6 +50,7 @@ const ALLOWED_MODEL_BASE_URL_SET = new Set(ALLOWED_MODEL_BASE_URLS.map(normalize
 const ALLOWED_MODEL_ORIGINS = new Set([
   'https://api.1route.dev',
   'https://www.1route.dev',
+  'https://api.taoktao.com',
   'https://api.openai.com',
   'https://generativelanguage.googleapis.com',
   'https://api.deepseek.com',

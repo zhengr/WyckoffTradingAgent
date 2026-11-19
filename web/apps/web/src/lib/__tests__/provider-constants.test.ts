@@ -15,6 +15,10 @@ describe('provider constants', () => {
     expect(isSafeProviderBaseUrl('https://example.com:8443/v1')).toBe(false)
   })
 
+  it('allows the configured taoktao OpenAI-compatible gateway', () => {
+    expect(isAllowedModelBaseUrl('https://api.taoktao.com/v1')).toBe(true)
+  })
+
   it('does not allow the retired plaintext provider origin', () => {
     expect(ALLOWED_MODEL_BASE_URLS).not.toContain('http://token.thegun.cn:8317')
     expect(isAllowedModelBaseUrl('http://token.thegun.cn:8317/v1')).toBe(false)
