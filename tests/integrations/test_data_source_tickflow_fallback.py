@@ -31,6 +31,8 @@ def _disable_other_fallbacks(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("DATA_SOURCE_DISABLE_AKSHARE", "1")
     monkeypatch.setenv("DATA_SOURCE_DISABLE_BAOSTOCK", "1")
     monkeypatch.setenv("DATA_SOURCE_DISABLE_EFINANCE", "1")
+    monkeypatch.setenv("DATA_SOURCE_DISABLE_TENCENT", "1")
+    monkeypatch.setenv("DATA_SOURCE_DISABLE_SINA", "1")
     monkeypatch.delenv("DATA_SOURCE_DISABLE_TICKFLOW", raising=False)
 
 
@@ -96,4 +98,4 @@ def test_fetch_stock_hist_error_message_contains_tickflow_chain(monkeypatch: pyt
 
     with pytest.raises(RuntimeError) as exc:
         ds.fetch_stock_hist("000001", "2026-04-10", "2026-04-18", adjust="qfq")
-    assert "tickflow→tushare→akshare→baostock→efinance" in str(exc.value)
+    assert "tickflow→tushare→akshare→baostock→efinance→tencent→sina" in str(exc.value)

@@ -19,6 +19,8 @@ import integrations.data_source_akshare
 import integrations.data_source_baostock
 import integrations.data_source_efinance
 import integrations.data_source_format
+import integrations.data_source_sina
+import integrations.data_source_tencent
 import integrations.data_source_tickflow
 import integrations.data_source_tushare
 from integrations.index_data_source import fetch_index_akshare as fetch_index_akshare
@@ -74,6 +76,8 @@ def _stock_fetchers() -> tuple[StockFetcher, ...]:
         _try_akshare,
         _try_baostock,
         _try_efinance,
+        _try_tencent,
+        _try_sina,
     )
 
 
@@ -149,6 +153,32 @@ def _try_efinance(ctx: StockHistFetchContext) -> pd.DataFrame | None:
         return None
 
 
+def _try_tencent(ctx: StockHistFetchContext) -> pd.DataFrame | None:
+    if _env_flag("DATA_SOURCE_DISABLE_TENCENT"):
+        ctx.failed_details.append("tencent=disabled_by_env")
+        return None
+    try:
+        df = integrations.data_source_tencent.fetch_stock_tencent(ctx.symbol, ctx.start_s, ctx.end_s, ctx.adjust)
+        return _fallback_output(ctx, df, "tencent")
+    except Exception as exc:
+        ctx.failed_details.append(f"tencent={integrations.data_source_format.compact_error(exc)}")
+        _debug_source_fail("tencent", exc)
+        return None
+
+
+def _try_sina(ctx: StockHistFetchContext) -> pd.DataFrame | None:
+    if _env_flag("DATA_SOURCE_DISABLE_SINA"):
+        ctx.failed_details.append("sina=disabled_by_env")
+        return None
+    try:
+        df = integrations.data_source_sina.fetch_stock_sina(ctx.symbol, ctx.start_s, ctx.end_s, ctx.adjust)
+        return _fallback_output(ctx, df, "sina")
+    except Exception as exc:
+        ctx.failed_details.append(f"sina={integrations.data_source_format.compact_error(exc)}")
+        _debug_source_fail("sina", exc)
+        return None
+
+
 def _record_tickflow_failure(ctx: StockHistFetchContext, exc: Exception) -> None:
     ctx.tickflow_failed = True
     detail = integrations.data_source_format.compact_error(exc)
@@ -163,7 +193,7 @@ def _record_tickflow_failure(ctx: StockHistFetchContext, exc: Exception) -> None
     ctx.tickflow_limit_notices.append(TICKFLOW_LIMIT_HINT)
     ctx.failed_details.append(f"tickflow_limit_hint={TICKFLOW_LIMIT_HINT}")
     logger.warning(
-        "tickflow rate limited: symbol=%s, range=%s..%s, fallback_chain=tushare->akshare->baostock->efinance",
+        "tickflow rate limited: symbol=%s, range=%s..%s, fallback_chain=tushare->akshare->baostock->efinance->tencent->sina",
         ctx.symbol,
         ctx.start_s,
         ctx.end_s,
@@ -188,7 +218,7 @@ def _stock_hist_failure(ctx: StockHistFetchContext) -> RuntimeError:
     hint_suffix = _build_datasource_hint(ctx.failed_details)
     return RuntimeError(
         f"数据拉取全线失败 [标:{ctx.symbol}, 范围:{ctx.start_s}..{ctx.end_s}, 复权:{ctx.adjust}]：已按顺序尝试 "
-        f"tickflow→tushare→akshare→baostock→efinance，均无可用 K 线数据。请检查该标的是否已退市或处于长期停牌期。"
+        f"tickflow→tushare→akshare→baostock→efinance→tencent→sina，均无可用 K 线数据。请检查该标的是否已退市或处于长期停牌期。"
         f"{detail_suffix}{hint_suffix}"
     )
 

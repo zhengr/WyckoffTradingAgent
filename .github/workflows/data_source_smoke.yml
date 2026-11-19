@@ -50,3 +50,21 @@ jobs:
           assert j['code'] == 0, j.get('msg')
           print('TUSHARE_OK rows=%d' % len(j['data']['items']))
           EOF
+      - name: Probe tencent
+        continue-on-error: true
+        run: |
+          python - << 'EOF'
+          import requests
+          r = requests.get('https://web.ifzq.gtimg.cn/appstock/app/fqkline/get', params={'param': 'sh600519,day,2026-11-10,2026-11-18,10,qfq'}, timeout=15, headers={'User-Agent': 'Mozilla/5.0'})
+          rows = r.json()['data']['sh600519']['qfqday']
+          print('TENCENT_OK rows=%d last=%s' % (len(rows), rows[-1]))
+          EOF
+      - name: Probe sina
+        continue-on-error: true
+        run: |
+          python - << 'EOF'
+          import requests
+          r = requests.get('https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/CN_MarketData.getKLineData', params={'symbol': 'sh600519', 'scale': 240, 'ma': 'no', 'datalen': 10}, timeout=15, headers={'User-Agent': 'Mozilla/5.0'})
+          rows = r.json()
+          print('SINA_OK rows=%d last=%s' % (len(rows), rows[-1]))
+          EOF
