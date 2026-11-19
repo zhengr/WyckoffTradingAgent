@@ -4,14 +4,20 @@ export const PLANET_MEMBERSHIP_TIME_ZONE = 'Asia/Shanghai'
 export const PLANET_MEMBERSHIP_URL = 'https://wyckoff-analysis.pages.dev/membership#capability-boundary'
 
 export function planetMembershipToday(now = new Date()): string {
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone: PLANET_MEMBERSHIP_TIME_ZONE,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).formatToParts(now)
-  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]))
-  return `${values.year}-${values.month}-${values.day}`
+  try {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: PLANET_MEMBERSHIP_TIME_ZONE,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).formatToParts(now)
+    const values = Object.fromEntries(parts.map((part) => [part.type, part.value]))
+    if (values.year && values.month && values.day) return `${values.year}-${values.month}-${values.day}`
+  } catch {
+    // 某些精简 ICU 环境对 timeZone 抛 "Incorrect locale information provided"，
+    // 回退到 UTC 日期，避免中断 isPlanetMembershipActive 的会员判断。
+  }
+  return now.toISOString().slice(0, 10)
 }
 
 export function isPlanetMembershipActive(expiresOn: unknown, today = planetMembershipToday()): boolean {
