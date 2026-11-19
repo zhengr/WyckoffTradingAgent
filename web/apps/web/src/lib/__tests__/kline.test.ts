@@ -47,7 +47,7 @@ describe('fetchKlineWithQuality', () => {
     const { data, quality } = await fetchKlineWithQuality('920029', { tushare: 'tok' }, 'user1')
     expect(quality.source).toBe('tushare')
     expect(data).toHaveLength(1)
-    expect(data[0].close).toBeCloseTo(28.16) // 不复权原价
+    expect(data[0]?.close).toBeCloseTo(28.16) // 不复权原价
   })
 
   it('throws a neutral error when all sources fail', async () => {
