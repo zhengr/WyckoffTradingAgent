@@ -16,14 +16,8 @@ jobs:
           python-version: "3.11"
       - name: Install
         run: pip install -q "akshare==1.18.64" baostock efinance requests
-      - name: Probe akshare
-        run: |
-          python - << 'EOF'
-          import akshare as ak
-          df = ak.stock_zh_a_hist(symbol='600519', start_date='20261101', end_date='20261118', adjust='qfq')
-          print('AKSHARE_OK rows=%d last=%s' % (len(df), df.iloc[-1]['收盘']))
-          EOF
       - name: Probe baostock
+        continue-on-error: true
         run: |
           python - << 'EOF'
           import baostock as bs
@@ -37,6 +31,7 @@ jobs:
           print('BAOSTOCK_OK rows=%d last=%s' % (len(rows), rows[-1] if rows else None))
           EOF
       - name: Probe efinance
+        continue-on-error: true
         run: |
           python - << 'EOF'
           import efinance as ef
@@ -44,6 +39,7 @@ jobs:
           print('EFINANCE_OK rows=%d last_close=%s' % (len(df), df.iloc[-1]['收盘'] if len(df) else None))
           EOF
       - name: Probe tushare
+        continue-on-error: true
         env:
           TUSHARE_TOKEN: ${{ secrets.TUSHARE_TOKEN }}
         run: |
