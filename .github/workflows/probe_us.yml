@@ -1,0 +1,35 @@
+name: Probe US sources
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+      - name: Probe US kline endpoints
+        run: |
+          python - << 'EOF'
+          import requests
+          urls = [
+            ("tx_us1", "https://web.ifzq.gtimg.cn/appstock/app/us/kline?param=usAAPL.OQ,day,,,20"),
+            ("tx_us2", "https://web.ifzq.gtimg.cn/appstock/app/hkfqkline/get?param=usAAPL,day,,,20,qfq"),
+            ("tx_us3", "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=usAAPL,day,,,20,qfq"),
+            ("tx_us4", "https://web.ifzq.gtimg.cn/appstock/app/kline/kline?param=usAAPL,day,,,20"),
+            ("sina_us", "https://stock.finance.sina.com.cn/usstock/api/jsonp.php/x/US_MinKService.getDailyK?symbol=aapl"),
+            ("sina_us2", "https://finance.sina.com.cn/realstock/company/aapl/hisdata/klc_kl.js"),
+          ]
+          for name, url in urls:
+            try:
+              r = requests.get(url, timeout=15, headers={'User-Agent':'Mozilla/5.0','Referer':'https://finance.qq.com'})
+              print(f"{name}: HTTP {r.status_code} {r.text[:150]}")
+            except Exception as e:
+              print(f"{name}: FAIL {type(e).__name__}: {str(e)[:70]}")
+          EOF
