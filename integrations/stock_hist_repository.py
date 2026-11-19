@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 from datetime import date
 from typing import Literal
 
@@ -11,7 +10,6 @@ import pandas as pd
 from integrations.data_source import fetch_stock_hist as fetch_stock_hist_from_source
 
 AdjustType = Literal["", "qfq", "hfq"]
-logger = logging.getLogger(__name__)
 
 # ─── 纯工具函数（原 core/stock_cache.py，多文件依赖） ───
 
@@ -48,22 +46,6 @@ def denormalize_hist_df(df: pd.DataFrame) -> pd.DataFrame:
 
 
 # ─── 内部辅助 ───
-
-
-def _collect_tickflow_limit_hints(df: pd.DataFrame | None) -> list[str]:
-    if df is None:
-        return []
-    hints = df.attrs.get("tickflow_limit_hints")
-    if isinstance(hints, list):
-        out: list[str] = []
-        for item in hints:
-            text = str(item or "").strip()
-            if text and text not in out:
-                out.append(text)
-        if out:
-            return out
-    one = str(df.attrs.get("tickflow_limit_hint", "") or "").strip()
-    return [one] if one else []
 
 
 def _to_date(value: str | date) -> date:
@@ -109,9 +91,4 @@ def get_stock_hist(
     result = denormalize_hist_df(result_norm)
     result.attrs["source"] = "realtime"
     result.attrs["upstream_source"] = str(df.attrs.get("source", "") or "realtime")
-    hints = _collect_tickflow_limit_hints(df)
-    if hints:
-        result.attrs["tickflow_limit_hints"] = hints
-        result.attrs["tickflow_limit_hint"] = hints[0]
-        logger.warning("[stock_repo] %s", hints[0])
     return result

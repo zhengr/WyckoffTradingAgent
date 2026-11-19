@@ -216,8 +216,6 @@ jobs:
         period_key: [recent_2m, recent_6m, bull_2020, bear_2022, sideways_2023, volatile_2024, bull_2025]
     env:
       PYTHONUNBUFFERED: "1"
-      TICKFLOW_API_KEY: ${{ secrets.TICKFLOW_API_KEY }}
-      TICKFLOW_BASE_URL: ${{ secrets.TICKFLOW_BASE_URL }}
       TUSHARE_TOKEN: ${{ secrets.TUSHARE_TOKEN }}
       TZ: Asia/Shanghai
       BACKTEST_SNAPSHOT_WORKERS: "6"
@@ -362,8 +360,6 @@ jobs:
     env:
       PYTHONUNBUFFERED: "1"
       TZ: Asia/Shanghai
-      TICKFLOW_API_KEY: ${{ secrets.TICKFLOW_API_KEY }}
-      TICKFLOW_BASE_URL: ${{ secrets.TICKFLOW_BASE_URL }}
 
     steps:
       - name: Resolve period dates

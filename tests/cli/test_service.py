@@ -647,10 +647,10 @@ def test_each_tool_call_builds_tools_with_that_requests_credentials(serve):
         EchoProvider(), shared=True, tools_factory=factory, tool_names=frozenset({"intraday_rescue_check"})
     )
 
-    _post_tool(port, "intraday_rescue_check", {"credentials": {"tickflow_api_key": "alice-key"}}, user="alice")
-    _post_tool(port, "intraday_rescue_check", {"credentials": {"tickflow_api_key": "bob-key"}}, user="bob")
+    _post_tool(port, "intraday_rescue_check", {"credentials": {"api_key": "alice-key"}}, user="alice")
+    _post_tool(port, "intraday_rescue_check", {"credentials": {"api_key": "bob-key"}}, user="bob")
 
-    assert built == [("alice", {"tickflow_api_key": "alice-key"}), ("bob", {"tickflow_api_key": "bob-key"})]
+    assert built == [("alice", {"api_key": "alice-key"}), ("bob", {"api_key": "bob-key"})]
 
 
 def test_tool_results_are_strict_json(serve):

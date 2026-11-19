@@ -15,9 +15,9 @@ from core.constants import (
 )
 from core.recommendation_payload import event_change_pct
 from integrations.recommendation_tracking_common import (
-    chunked,
     fetch_records_from_table,
-    ohlc_map_from_tickflow_hist,
+    fetch_tracking_market_data,
+    ohlc_map_from_hist,
     pick_close_on_or_before,
     recommend_date_to_yyyymmdd,
     safe_float,
@@ -46,10 +46,6 @@ def refresh_tracking_performance(
         raise ValueError("SUPABASE_URL/SUPABASE_SERVICE_ROLE_KEY 未配置")
     market_key = resolve_tracking_market(market)
     require_server_write_context(f"refresh {market_key} tracking performance")
-    api_key = os.getenv("TICKFLOW_API_KEY", "").strip()
-    if not api_key:
-        raise ValueError("TICKFLOW_API_KEY 未配置")
-
     client = create_admin_client()
     table = TRACKING_TABLE_BY_MARKET[market_key]
     all_records = fetch_records_from_table(client, table, "id,code,recommend_date,initial_price")
@@ -58,9 +54,9 @@ def refresh_tracking_performance(
         return empty_performance_summary()
 
     grouped = group_records_by_market_code(records, market_key)
-    symbol_map = _tickflow_symbol_map(sorted(grouped), market_key)
-    hist_map = _fetch_histories(api_key, sorted(set(symbol_map.values())), kline_count)
-    hist_by_code = {code: hist_map.get(symbol) for code, symbol in symbol_map.items()}
+    symbols = sorted(code for code in grouped if code)
+    _quotes, hist_map = fetch_tracking_market_data("", symbols, _performance_batch_size())
+    hist_by_code = {code: hist_map.get(code) for code in grouped}
     now_iso = datetime.now(UTC).isoformat()
     updates, codes_no_data, latest_td = build_market_performance_updates(
         grouped,
@@ -110,7 +106,7 @@ def build_market_performance_updates(
     codes_no_data = 0
     latest_td = ""
     for code, rows in grouped.items():
-        ohlc = ohlc_map_from_tickflow_hist(hist_map.get(code))
+        ohlc = ohlc_map_from_hist(hist_map.get(code))
         trade_dates = sorted(ohlc)
         if not trade_dates:
             codes_no_data += 1
@@ -273,24 +269,6 @@ def _market_code_key(raw_code: Any, market: str) -> str:
         digits = "".join(ch for ch in raw if ch.isdigit())
         return digits[-6:].zfill(6) if digits else ""
     return raw
-
-
-def _tickflow_symbol_map(codes: list[str], market: str) -> dict[str, str]:
-    if market != "cn":
-        return {code: code for code in codes if code}
-    from integrations.tickflow_client import normalize_cn_symbol
-
-    return {code: symbol for code in codes if (symbol := normalize_cn_symbol(code))}
-
-
-def _fetch_histories(api_key: str, symbols: list[str], kline_count: int) -> dict[str, pd.DataFrame]:
-    from integrations.tickflow_client import TickFlowClient
-
-    client = TickFlowClient(api_key=api_key)
-    hist_map: dict[str, pd.DataFrame] = {}
-    for batch in chunked(symbols, _performance_batch_size()):
-        hist_map.update(client.get_klines_batch(batch, period="1d", count=max(int(kline_count), 1), adjust="forward"))
-    return hist_map
 
 
 def _performance_batch_size() -> int:

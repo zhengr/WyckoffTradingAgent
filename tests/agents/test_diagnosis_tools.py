@@ -72,7 +72,6 @@ def test_analyze_stock_price_returns_price_records(monkeypatch) -> None:
             }
         ]
     )
-    rows.attrs["tickflow_limit_hint"] = "TickFlow fallback"
 
     def fake_get_stock_hist(code: str, start_date: date, end_date: date):
         assert code == "000001"
@@ -87,7 +86,6 @@ def test_analyze_stock_price_returns_price_records(monkeypatch) -> None:
     assert result["data_status"] == "ok"
     assert result["latest_close"] == 10.2
     assert result["data"][0]["close"] == 10.2
-    assert result["tickflow_limit_hint"] == "TickFlow fallback"
 
 
 def test_analyze_stock_price_sanitizes_bad_ohlcv(monkeypatch) -> None:
@@ -130,40 +128,34 @@ def test_analyze_stock_rejects_unknown_mode(monkeypatch) -> None:
     assert "mode 参数无效" in result["error"]
 
 
-def test_analyze_stock_fundamental_requires_tickflow_key(monkeypatch) -> None:
-    monkeypatch.setattr(diagnosis_tools, "get_credential", lambda *_args, **_kwargs: "")
+def test_analyze_stock_fundamental_requires_tushare_token(monkeypatch) -> None:
+    monkeypatch.setattr(diagnosis_tools, "ensure_tushare_token", lambda _ctx: None)
+    monkeypatch.setattr("integrations.tushare_client.has_tushare_token", lambda: False)
 
     result = diagnosis_tools.analyze_stock("000001", mode="fundamental")
 
-    assert "TickFlow" in result["error"]
+    assert "Tushare" in result["error"]
 
 
 def test_analyze_stock_fundamental_scores_latest_metrics(monkeypatch) -> None:
-    class FakeTickFlowClient:
-        def __init__(self, api_key: str) -> None:
-            assert api_key == "key"
-
-        def get_financial_metrics(self, symbols, *, latest):
-            assert symbols == ["000001"]
-            assert latest is True
-            return {
-                "000001.SZ": [
-                    {
-                        "period_end": "20241231",
-                        "roe": 18,
-                        "net_income_yoy": 20,
-                        "revenue_yoy": 12,
-                        "gross_margin": 35,
-                        "debt_to_asset_ratio": 40,
-                        "operating_cash_to_revenue": 8,
-                    }
-                ]
-            }
-
-    monkeypatch.setattr(diagnosis_tools, "get_credential", lambda *_args, **_kwargs: "key")
+    monkeypatch.setattr(diagnosis_tools, "ensure_tushare_token", lambda _ctx: None)
+    monkeypatch.setattr("integrations.tushare_client.has_tushare_token", lambda: True)
     monkeypatch.setattr(diagnosis_tools, "code_to_name", lambda _code: "平安银行")
     monkeypatch.setattr(diagnosis_tools, "cn_today", lambda: date(2025, 4, 30))
-    monkeypatch.setattr("integrations.tickflow_client.TickFlowClient", FakeTickFlowClient)
+    monkeypatch.setattr(
+        "integrations.tushare_fundamentals.fetch_latest_financial_map",
+        lambda symbols: {
+            "000001": {
+                "period_end": "2024-12-31",
+                "roe": 18,
+                "net_income_yoy": 20,
+                "revenue_yoy": 12,
+                "gross_margin": 35,
+                "debt_to_asset_ratio": 40,
+                "operating_cash_to_revenue": 8,
+            }
+        },
+    )
 
     result = diagnosis_tools.analyze_stock("000001", mode="fundamental")
 
@@ -175,16 +167,10 @@ def test_analyze_stock_fundamental_scores_latest_metrics(monkeypatch) -> None:
 
 
 def test_analyze_stock_fundamental_handles_missing_records(monkeypatch) -> None:
-    class FakeTickFlowClient:
-        def __init__(self, api_key: str) -> None:
-            pass
-
-        def get_financial_metrics(self, symbols, *, latest):
-            return {}
-
-    monkeypatch.setattr(diagnosis_tools, "get_credential", lambda *_args, **_kwargs: "key")
+    monkeypatch.setattr(diagnosis_tools, "ensure_tushare_token", lambda _ctx: None)
+    monkeypatch.setattr("integrations.tushare_client.has_tushare_token", lambda: True)
     monkeypatch.setattr(diagnosis_tools, "code_to_name", lambda _code: "平安银行")
-    monkeypatch.setattr("integrations.tickflow_client.TickFlowClient", FakeTickFlowClient)
+    monkeypatch.setattr("integrations.tushare_fundamentals.fetch_latest_financial_map", lambda symbols: {})
 
     result = diagnosis_tools.analyze_stock("000001", mode="fundamental")
 

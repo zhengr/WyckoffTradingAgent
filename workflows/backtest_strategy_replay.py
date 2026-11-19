@@ -140,7 +140,7 @@ class MarketRules:
 def _hk_risk_blocked(candles: pd.DataFrame, idx: int) -> bool:
     """基于 core.hk_risk_filter 判定该交易日是否触发港股风险（仙股/流动性/极端波幅/价格跳变）。
 
-    TickFlow 港股历史 K 线的 amount 字段恒为 0（数据源限制），dollar_volume_series
+    港股历史 K 线的 amount 字段缺失（腾讯源不提供成交额），dollar_volume_series
     会回退为 close*volume 口径，否则所有交易日都会被误判为流动性不足。
     """
     from core.hk_risk_filter import classify_hk_risk

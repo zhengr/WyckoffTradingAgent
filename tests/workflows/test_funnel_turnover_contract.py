@@ -94,7 +94,7 @@ def test_missing_share_map_preserves_native_coverage(monkeypatch):
 
 @pytest.mark.parametrize(
     "source,factor",
-    [("tickflow_batch", 100), ("tickflow", 100), ("akshare", 100), ("efinance", 100), ("tushare", 1), ("baostock", 1)],
+    [("akshare", 100), ("efinance", 100), ("tushare", 1), ("baostock", 1)],
 )
 def test_known_source_units_are_converted_once(monkeypatch, source, factor):
     monkeypatch.setattr(funnel_data, "fetch_float_share_map", lambda **kw: {"000001": 1e9})
@@ -108,7 +108,7 @@ def test_known_source_units_are_converted_once(monkeypatch, source, factor):
 def test_explicit_volume_unit_overrides_vendor_default(monkeypatch):
     monkeypatch.setattr(funnel_data, "fetch_float_share_map", lambda **kw: {"000001": 1e9})
     df = frame([None, None], [5000000, 10000000])
-    df.attrs["source"] = "tickflow_batch"
+    df.attrs["source"] = "akshare"
     assert funnel_data._attach_turnover({"000001": df}) == 1
     assert list(df.turnover) == [0.5, 1.0]
 

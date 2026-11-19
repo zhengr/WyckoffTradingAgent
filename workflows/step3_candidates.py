@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from functools import partial
@@ -176,26 +175,26 @@ def _benchmark_return(window: object) -> float | None:
 
 
 def _load_step3_financial_map(items: list[dict]) -> dict[str, dict]:
-    financial_map: dict[str, dict] = {}
-    tickflow_api_key = os.getenv("TICKFLOW_API_KEY", "").strip()
-    if not tickflow_api_key:
-        return financial_map
-    try:
-        return _fetch_tickflow_financial_map(items, tickflow_api_key)
-    except Exception as e:
-        print(f"[step3] TickFlow 财务指标加载失败: {e}")
-        return financial_map
-
-
-def _fetch_tickflow_financial_map(items: list[dict], api_key: str) -> dict[str, dict]:
-    from integrations.tickflow_client import fetch_financial_metric_map
+    from integrations.tushare_client import has_tushare_token
 
     codes = [str(i["code"]) for i in items if i.get("code")]
-    print(f"[step3] TickFlow 财务指标请求: symbols={len(codes)}")
-    financial_map = fetch_financial_metric_map(api_key, codes)
+    if not codes or not has_tushare_token():
+        return {}
+    try:
+        return _fetch_step3_financial_map(codes)
+    except Exception as e:
+        print(f"[step3] 财务指标加载失败: {e}")
+        return {}
+
+
+def _fetch_step3_financial_map(codes: list[str]) -> dict[str, dict]:
+    from integrations.tushare_fundamentals import fetch_latest_financial_map
+
+    print(f"[step3] 财务指标请求: symbols={len(codes)}")
+    financial_map = fetch_latest_financial_map(codes)
     missing_codes = sorted(set(codes) - set(financial_map))
     print(
-        f"[step3] TickFlow 财务指标: {len(codes) - len(missing_codes)}/{len(codes)}, "
+        f"[step3] 财务指标: {len(codes) - len(missing_codes)}/{len(codes)}, "
         f"missing={len(missing_codes)}, sample_missing={','.join(missing_codes[:8]) or '-'}"
     )
     return financial_map

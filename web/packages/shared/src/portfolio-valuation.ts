@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { normalizePortfolioCode, normalizeTickFlowSymbol } from './agent-market'
+import { normalizePortfolioCode } from './agent-market'
+import { fetchServerQuotes, type ServerQuote } from './market-data'
 
 const ECB_RATES_URL = 'https://api.frankfurter.dev/v2/rates'
 
@@ -15,7 +16,6 @@ interface RefreshDeps {
 }
 
 interface RefreshOptions {
-  quoteEndpoint?: string
   cnyRates?: Partial<Record<'HKD' | 'USD', number>>
 }
 
@@ -54,14 +54,12 @@ export async function refreshPortfolioTotalEquity(
 
 async function valuePositions(
   deps: RefreshDeps,
-  userId: string,
+  _userId: string,
   freeCash: number,
   positions: ValuationPosition[],
   options: RefreshOptions,
 ): Promise<number> {
-  const apiKey = await loadTickFlowKey(deps.supabase, userId)
-  if (!apiKey) throw new Error('未配置 TickFlow API Key')
-  const prices = await fetchPrices(deps.fetch, apiKey, positions, options.quoteEndpoint)
+  const prices = await fetchPrices(deps.fetch, positions)
   const currencies = new Set(positions.map((position) => portfolioCurrency(position.code)))
   const rates = await loadCnyRates(deps.fetch, currencies, options.cnyRates)
   let positionsValue = 0
@@ -76,34 +74,17 @@ async function valuePositions(
   return roundMoney(freeCash + positionsValue)
 }
 
-async function loadTickFlowKey(supabase: SupabaseClient, userId: string): Promise<string> {
-  const result = await supabase
-    .from('user_settings')
-    .select('tickflow_api_key')
-    .eq('user_id', userId)
-    .single()
-  return String(result.data?.tickflow_api_key || '').trim()
-}
-
 async function fetchPrices(
   fetcher: typeof globalThis.fetch,
-  apiKey: string,
   positions: ValuationPosition[],
-  quoteEndpoint = '/api/llm-proxy/v1/quotes',
 ): Promise<Record<string, number>> {
-  const requested = new Map(positions.map((position) => [normalizeTickFlowSymbol(position.code), position.code]))
-  const separator = quoteEndpoint.includes('?') ? '&' : '?'
-  const url = `${quoteEndpoint}${separator}symbols=${encodeURIComponent([...requested.keys()].join(','))}`
-  const response = await fetcher(url, {
-    headers: { 'x-api-key': apiKey, 'X-Target-URL': 'https://api.tickflow.org' },
-  })
-  if (!response.ok) throw new Error(`TickFlow 返回 HTTP ${response.status}`)
-  const payload = await response.json() as { data?: Record<string, unknown>[] }
+  const codes = positions.map((position) => position.code)
+  const quotes = await fetchServerQuotes(codes, fetcher)
   const prices: Record<string, number> = {}
-  for (const row of payload.data || []) {
-    const code = requested.get(String(row.symbol || '').toUpperCase())
-    const price = quotePrice(row)
-    if (code && price > 0) prices[code] = price
+  for (const position of positions) {
+    const quote: ServerQuote | undefined = quotes[position.code] || quotes[position.code.split('.')[0] || '']
+    const price = quote?.price
+    if (price != null && price > 0) prices[position.code] = price
   }
   return prices
 }
@@ -143,14 +124,6 @@ function portfolioCurrency(code: string): 'CNY' | 'HKD' | 'USD' {
   if (code.endsWith('.HK')) return 'HKD'
   if (code.endsWith('.US')) return 'USD'
   return 'CNY'
-}
-
-function quotePrice(row: Record<string, unknown>): number {
-  for (const key of ['last_price', 'close', 'last', 'price', 'current']) {
-    const value = Number(row[key] || 0)
-    if (Number.isFinite(value) && value > 0) return value
-  }
-  return 0
 }
 
 function positive(value: number | undefined): boolean {

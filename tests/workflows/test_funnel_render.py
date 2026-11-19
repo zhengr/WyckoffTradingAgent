@@ -61,7 +61,7 @@ def test_data_quality_report_lines_show_coverages_sources_rps_and_rejections() -
                 "reasons": ["financial_coverage<90%"],
                 "financial_requested": True,
                 "coverage": {"ohlcv": 0.98, "market_cap": 0.96, "financial": 0.75},
-                "ohlcv_source_counts": {"tickflow": 70, "tushare": 28},
+                "ohlcv_source_counts": {"akshare": 70, "tushare": 28},
             },
             "rps_universe_count": 98,
             "layer_rejections": {
@@ -74,7 +74,7 @@ def test_data_quality_report_lines_show_coverages_sources_rps_and_rejections() -
     assert "OHLCV 98.0%" in lines[0]
     assert "财务 75.0%" in lines[0]
     assert "observe_only" in lines[0]
-    assert "tickflow=70" in lines[1]
+    assert "akshare=70" in lines[1]
     assert "RPS universe=98" in lines[1]
     assert "L1:100→80" in lines[2]
 

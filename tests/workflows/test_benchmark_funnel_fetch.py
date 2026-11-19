@@ -23,7 +23,7 @@ def test_summarize_fetch_rows_counts_success_alignment_and_sources() -> None:
         "single",
         ["000001", "000002", "000003"],
         [
-            {"ok": True, "latest": "2026-06-22", "source": "tickflow"},
+            {"ok": True, "latest": "2026-06-22", "source": "akshare"},
             {"ok": True, "latest": "2026-06-21", "source": ""},
             {"ok": False, "error": "TimeoutError"},
         ],
@@ -35,7 +35,7 @@ def test_summarize_fetch_rows_counts_success_alignment_and_sources() -> None:
     assert summary["success_pct"] == 66.67
     assert summary["aligned"] == 1
     assert summary["qps"] == 1.0
-    assert summary["sources"] == {"tickflow": 1, "unknown": 1}
+    assert summary["sources"] == {"akshare": 1, "unknown": 1}
     assert summary["errors"] == {"TimeoutError": 1}
 
 

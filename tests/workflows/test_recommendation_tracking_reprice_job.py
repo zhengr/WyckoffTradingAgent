@@ -7,7 +7,7 @@ def test_recommendation_reprice_job_refreshes_cn(monkeypatch):
     calls: list[str] = []
     monkeypatch.setattr(
         job,
-        "refresh_tracking_prices_with_tickflow_realtime",
+        "refresh_tracking_prices_realtime",
         lambda: calls.append("cn") or _summary(rows_total=3, rows_updated=2),
     )
     monkeypatch.setattr(
@@ -26,7 +26,7 @@ def test_recommendation_reprice_job_uses_global_market_path(monkeypatch):
     import workflows.recommendation_tracking_reprice_job as job
 
     calls: list[tuple[str, str]] = []
-    monkeypatch.setattr(job, "refresh_tracking_prices_with_tickflow_realtime", lambda: calls.append(("cn", "")) or {})
+    monkeypatch.setattr(job, "refresh_tracking_prices_realtime", lambda: calls.append(("cn", "")) or {})
     monkeypatch.setattr(
         job,
         "refresh_global_tracking_prices",

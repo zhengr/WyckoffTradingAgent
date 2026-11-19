@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import logging
 import os
@@ -135,19 +136,21 @@ def _diagnose_data_sources() -> dict[str, dict[str, Any]]:
     else:
         results["tushare"] = _check_tushare(tushare_token)
 
-    tickflow_api_key = os.getenv("TICKFLOW_API_KEY", "").strip()
-    if not tickflow_api_key:
-        results["tickflow"] = {
-            "status": "unconfigured",
-            "api_key_configured": False,
-            "error": None,
-        }
-    else:
-        results["tickflow"] = {
-            "status": "healthy",
-            "api_key_configured": True,
-            "error": None,
-        }
+    # 免费降级源无需密钥：检查模块是否可用、是否被环境变量关闭。
+    fallback_sources = {
+        "akshare": "DATA_SOURCE_DISABLE_AKSHARE",
+        "baostock": "DATA_SOURCE_DISABLE_BAOSTOCK",
+        "efinance": "DATA_SOURCE_DISABLE_EFINANCE",
+        "tencent": "DATA_SOURCE_DISABLE_TENCENT",
+        "sina": "DATA_SOURCE_DISABLE_SINA",
+    }
+    for source, disable_env in fallback_sources.items():
+        if os.getenv(disable_env, "").strip():
+            results[source] = {"status": "disabled", "error": None}
+        elif importlib.util.find_spec(f"integrations.data_source_{source}") is None:
+            results[source] = {"status": "unavailable", "error": "module not found"}
+        else:
+            results[source] = {"status": "healthy", "error": None}
     return results
 
 

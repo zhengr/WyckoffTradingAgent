@@ -2,35 +2,26 @@
 
 from __future__ import annotations
 
-import os
-from datetime import date
+import logging
 
-from core.backtest_execution import IntradayPriceFetcher, intraday_ms_window, price_at_or_before
+from core.backtest_execution import IntradayPriceFetcher
+
+logger = logging.getLogger(__name__)
 
 
-def tickflow_entry_price_fetcher_from_env() -> IntradayPriceFetcher | None:
-    api_key = os.getenv("TICKFLOW_API_KEY", "").strip()
-    if not api_key:
+def minute_entry_price_fetcher_from_env() -> IntradayPriceFetcher | None:
+    """历史分钟线入场价 fetcher；不需要额外凭据。
+
+    历史交易日的分钟线由 integrations.data_source_minute 提供
+    （intraday_entry_price_fetcher，无需 key，可取任意过去交易日）。
+    数据源不可用时返回 None，回测侧 tail_1455 回退到日线收盘价口径。
+    """
+    try:
+        from integrations.data_source_minute import intraday_entry_price_fetcher
+    except ImportError as exc:
+        logger.warning("minute data source unavailable, tail_1455 falls back to daily close: %s", exc)
         return None
+    return intraday_entry_price_fetcher()
 
-    from integrations.tickflow_client import TickFlowClient
 
-    client = TickFlowClient(api_key=api_key)
-
-    def _fetch(code: str, day: date, entry_time: str, _cache: dict) -> tuple[float | None, str]:
-        start_ms, end_ms = intraday_ms_window(day, entry_time)
-        # intraday=True hits /v1/klines/intraday, which only serves the *current* trading
-        # day's minute bars and ignores start/end time filters. Backtests need historical
-        # trading days, so use the plain /v1/klines endpoint (intraday=False) with period=1m,
-        # which does honor start_time_ms/end_time_ms for any past session.
-        df = client.get_klines(
-            code,
-            period="1m",
-            count=500,
-            intraday=False,
-            start_time_ms=start_ms,
-            end_time_ms=end_ms,
-        )
-        return price_at_or_before(df, day, entry_time), f"tickflow_1m_{entry_time}"
-
-    return _fetch
+# Backward-compatible alias：旧名保留，供外部调用方平滑过渡。

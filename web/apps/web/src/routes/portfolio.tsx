@@ -12,9 +12,9 @@ import { MarkdownContent } from '@/components/markdown'
 import { UpgradeNotice } from '@/components/upgrade-notice'
 import { PlanetMembershipHint } from '@/components/planet-membership-cta'
 import { AIDisclaimer } from '@/components/ai-disclaimer'
-import { TICKFLOW_PURCHASE, fetchValueSnapshotWithFetch, isSupportedPortfolioCode, isValidBuyDt, normalizeCode, normalizePortfolioCode } from '@wyckoff/shared'
+import { fetchValueSnapshotWithFetch, isSupportedPortfolioCode, isValidBuyDt, normalizeCode, normalizePortfolioCode } from '@wyckoff/shared'
 import type { KlineRow, ValueSnapshot } from '@wyckoff/shared'
-import { fetchKlineViaTickFlow, getUserDataKeys } from '@/lib/kline'
+import { fetchKlineWithQuality, getUserDataKeys } from '@/lib/kline'
 import { formatSignedPercent } from '@/lib/format'
 import { usePlanetMembership } from '@/lib/planet-membership-gate'
 import { avg } from '@/lib/math'
@@ -188,7 +188,7 @@ function useFullDiagnosisRunner() {
       setModel(configs[0]?.model || 'unknown')
 
       setProgress({ step: 'kline', fetched: 0, total })
-      const entries = await fetchAllPositionKlines(portfolio.positions, keys, (n) => setProgress({ step: 'kline', fetched: n, total }))
+      const entries = await fetchAllPositionKlines(portfolio.positions, keys, user.id, (n) => setProgress({ step: 'kline', fetched: n, total }))
       if (abort.signal.aborted) return
 
       setResult(buildDiagnosisResult(entries, '', portfolio.free_cash))
@@ -305,8 +305,7 @@ function finishDiagnosisRun(
 
 type PositionEntry = { position: Position; kline: KlineRow[]; valueSnapshot: ValueSnapshot }
 
-async function fetchAllPositionKlines(positions: Position[], keys: Awaited<ReturnType<typeof getUserDataKeys>>, onProgress: (n: number) => void): Promise<PositionEntry[]> {
-  if (!keys.tickflow) throw new Error(`触发数据源并发请求限制，请升级数据源：${TICKFLOW_PURCHASE}`)
+async function fetchAllPositionKlines(positions: Position[], keys: Awaited<ReturnType<typeof getUserDataKeys>>, userId: string, onProgress: (n: number) => void): Promise<PositionEntry[]> {
   let fetched = 0
   const entries: PositionEntry[] = []
   const errors: string[] = []
@@ -315,7 +314,7 @@ async function fetchAllPositionKlines(positions: Position[], keys: Awaited<Retur
       try {
         const code = normalizePortfolioCode(p.code) || normalizeCode(p.code)
         const [kline, valueSnapshot] = await Promise.all([
-          fetchKlineViaTickFlow(code, keys.tickflow!),
+          fetchKlineWithQuality(code, keys, userId).then((r) => r.data),
           fetchValueSnapshotWithFetch(globalThis.fetch, code, keys).catch((): ValueSnapshot => ({ symbol: code, source: 'none', metrics: null, reason: 'not-found' })),
         ])
         if (kline.length > 0) entries.push({ position: positions[i]!, kline, valueSnapshot })

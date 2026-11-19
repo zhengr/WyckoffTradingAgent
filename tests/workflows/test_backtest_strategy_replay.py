@@ -121,7 +121,7 @@ def test_replay_one_blocked_by_penny_stock_risk_returns_none() -> None:
 
 
 def test_hk_risk_blocked_falls_back_to_close_times_volume_when_amount_zero() -> None:
-    """TickFlow 港股历史 K 线 amount 字段恒为 0，_hk_risk_blocked 必须回退为 close*volume
+    """港股历史 K 线 amount 字段缺失，_hk_risk_blocked 必须回退为 close*volume
     计算日均成交额，否则所有交易日都会被误判为流动性不足（真实生产回归 bug）。"""
     candles = pd.DataFrame(
         [

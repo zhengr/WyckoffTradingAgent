@@ -1225,7 +1225,6 @@ def settings_get(_params: dict[str, Any]) -> Iterator[Event]:
             config.get("stream_chunk_timeout_seconds") or DEFAULT_STREAM_CHUNK_TIMEOUT_SECONDS
         ),
         tool_timeout_seconds=int(config.get("tool_timeout_seconds") or DEFAULT_TOOL_TIMEOUT_SECONDS),
-        has_tickflow_key=bool(config.get("tickflow_api_key")),
         has_tushare_token=bool(config.get("tushare_token")),
     )
 

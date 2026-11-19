@@ -22,7 +22,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--batch-size", type=int, default=200)
     parser.add_argument("--batch-timeout", type=int, default=420)
     parser.add_argument("--batch-sleep", type=float, default=0.55)
-    parser.add_argument("--disable-tickflow-batch", action="store_true")
     parser.add_argument("--enforce-target-date", action="store_true")
     parser.add_argument("--output", default="", help="可选 JSON 输出路径")
     return parser.parse_args()
@@ -41,7 +40,6 @@ def config_from_args(args: argparse.Namespace) -> BenchmarkFetchConfig:
         batch_size=args.batch_size,
         batch_timeout=args.batch_timeout,
         batch_sleep=args.batch_sleep,
-        disable_tickflow_batch=args.disable_tickflow_batch,
         enforce_target_date=args.enforce_target_date,
         output=Path(args.output) if args.output else None,
     )

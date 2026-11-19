@@ -15,7 +15,6 @@ export interface UserSettings {
   wecom_webhook?: string
   dingtalk_webhook?: string
   tushare_token?: string
-  tickflow_api_key?: string
   tg_bot_token?: string
   tg_chat_id?: string
 }

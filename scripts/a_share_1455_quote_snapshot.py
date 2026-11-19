@@ -4,23 +4,22 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import re
 import sys
-from datetime import UTC, datetime, time
+from datetime import datetime, time
 from typing import Any
 from zoneinfo import ZoneInfo
 
-import requests
+import pandas as pd
 
-from integrations.tickflow_client import TICKFLOW_BASE_URL
+from integrations.spot_snapshot import fetch_spot_dataframe, normalize_spot_symbol
 
 _BEIJING = ZoneInfo("Asia/Shanghai")
-_UNIVERSE = "CN_Equity_A"
-_SYMBOL = re.compile(r"^\d{6}\.(?:SH|SZ|BJ)$")
-_SAFE_ERROR = re.compile(r"^[A-Za-z0-9_-]{1,60}$")
+_SYMBOL = re.compile(r"^\d{6}$")
 _MIN_COVERAGE = 5200
 _PAGE_SIZE = 20
+_SPOT_BASIS = "eastmoney_intraday_spot"
+_TDX_BASIS = "tdx_post_close_prior_session"
 
 
 def _number(value: Any) -> float | None:
@@ -31,29 +30,36 @@ def _number(value: Any) -> float | None:
     return result if result == result and abs(result) != float("inf") else None
 
 
-def _quote_time(value: Any) -> datetime | None:
-    stamp = _number(value)
-    if stamp is None or stamp <= 0:
+def _suffix(code: str) -> str:
+    if code.startswith(("0", "1", "2", "3")):
+        return "SZ"
+    if code.startswith(("4", "8", "9")):
+        return "BJ"
+    return "SH"
+
+
+def _detect_basis(df: pd.DataFrame) -> str:
+    """The tdx post-close package carries a trade date; the EastMoney spot feed does not."""
+    return _TDX_BASIS if "date" in df.columns else _SPOT_BASIS
+
+
+def _quote_time(row: dict[str, Any], basis: str, fetch_time: datetime) -> datetime | None:
+    if basis != _TDX_BASIS:
+        return fetch_time
+    digits = re.sub(r"\D", "", str(row.get("date") or ""))[:8]
+    if len(digits) != 8:
         return None
     try:
-        return datetime.fromtimestamp(stamp / (1000 if stamp > 10_000_000_000 else 1), tz=UTC).astimezone(_BEIJING)
-    except (OverflowError, OSError, ValueError):
+        return datetime.strptime(digits, "%Y%m%d").replace(hour=15, tzinfo=_BEIJING)
+    except ValueError:
         return None
 
 
-def _error_code(response: requests.Response) -> str | None:
-    try:
-        payload = response.json()
-    except (ValueError, requests.RequestException):
-        return None
-    code = payload.get("code") if isinstance(payload, dict) else None
-    return code if isinstance(code, str) and _SAFE_ERROR.fullmatch(code) else None
-
-
-def _base_result(now: datetime) -> dict[str, Any]:
+def _base_result(now: datetime, basis: str) -> dict[str, Any]:
     return {
         "ok": False,
-        "source": "TickFlow GET /v1/quotes?universes=CN_Equity_A",
+        "source": f"spot_snapshot.fetch_spot_dataframe ({basis})",
+        "data_basis": basis,
         "local_time": now.isoformat(timespec="seconds"),
         "coverage": 0,
         "valid_quote_count": 0,
@@ -66,46 +72,44 @@ def _base_result(now: datetime) -> dict[str, Any]:
     }
 
 
-def _parse_quotes(rows: list[Any], now: datetime, result: dict[str, Any], min_coverage: int) -> list[dict[str, Any]]:
+def _parse_quotes(df: pd.DataFrame, now: datetime, result: dict[str, Any], min_coverage: int) -> list[dict[str, Any]]:
     seen: set[str] = set()
     candidates: list[dict[str, Any]] = []
     active: list[tuple[float, datetime]] = []
     null_count = duplicate_count = mismatch_count = valid_quote_count = 0
-    for row in rows:
-        if not isinstance(row, dict):
+    basis = str(result["data_basis"])
+    for raw in df.to_dict("records"):
+        code = normalize_spot_symbol(raw.get("代码"))
+        if not _SYMBOL.fullmatch(code):
             null_count += 1
             continue
-        symbol = str(row.get("symbol") or "").strip().upper()
-        if not _SYMBOL.fullmatch(symbol):
-            null_count += 1
-            continue
-        ext = row.get("ext") if isinstance(row.get("ext"), dict) else {}
-        if ext.get("type") not in (None, "cn_equity") or row.get("region") not in (None, "CN"):
-            null_count += 1
-            continue
+        symbol = f"{code}.{_suffix(code)}"
         if symbol in seen:
             duplicate_count += 1
             continue
         seen.add(symbol)
-        price, prev_close = _number(row.get("last_price")), _number(row.get("prev_close"))
-        traded_at = _quote_time(row.get("timestamp"))
-        amount = _number(row.get("amount"))
-        if price is None or price <= 0 or prev_close is None or prev_close <= 0 or traded_at is None:
-            null_count += 1
-            continue
-        if amount is not None and amount > 0:
-            active.append((amount, traded_at))
-        name = str(ext.get("name") or "").upper()
-        if not name:
+        price = _number(raw.get("最新价"))
+        prev_close = _number(raw.get("昨收"))
+        vendor_pct = _number(raw.get("涨跌幅"))
+        if prev_close is None or prev_close <= 0:
+            # spot_snapshot does not expose the tdx prev_close; recover it from pct_chg.
+            prev_close = (
+                price / (1.0 + vendor_pct / 100.0) if price and vendor_pct is not None and vendor_pct > -100 else None
+            )
+        amount = _number(raw.get("成交额"))
+        traded_at = _quote_time(raw, basis, now)
+        name = str(raw.get("名称") or raw.get("name") or "").upper()
+        if price is None or price <= 0 or prev_close is None or prev_close <= 0 or traded_at is None or not name:
             null_count += 1
             continue
         valid_quote_count += 1
+        if amount is not None and amount > 0:
+            active.append((amount, traded_at))
         if "ST" in name or "退" in name:
             continue
         pct = (price / prev_close - 1) * 100
         if pct > -7:
             continue
-        vendor_pct = _number(ext.get("change_pct"))
         pct_mismatch = vendor_pct is not None and abs(vendor_pct - pct) > 0.5
         mismatch_count += int(pct_mismatch)
         age_seconds = round((now - traded_at).total_seconds())
@@ -134,7 +138,7 @@ def _parse_quotes(rows: list[Any], now: datetime, result: dict[str, Any], min_co
             for candidate in candidates[:_PAGE_SIZE]
         ],
     )
-    if valid_quote_count < min_coverage or duplicate_count or null_count > max(10, len(rows) // 100):
+    if valid_quote_count < min_coverage or duplicate_count or null_count > max(10, len(df) // 100):
         result["failure"] = "DATA_INCOMPLETE"
         return candidates
     if not active:
@@ -142,7 +146,11 @@ def _parse_quotes(rows: list[Any], now: datetime, result: dict[str, Any], min_co
         return candidates
     newest = max((traded_at for _, traded_at in sorted(active, reverse=True)[:20]), default=None)
     result["active_latest_time"] = newest.isoformat(timespec="seconds") if newest else None
-    if newest is None or newest.date() != now.date():
+    if basis == _TDX_BASIS:
+        # Post-close package: the previous session is the intended caliber, not staleness.
+        result["market_state"] = "post_close_prior_session"
+        result["ok"] = True
+    elif newest is None or newest.date() != now.date():
         result["failure"] = "CORE_QUOTES_STALE"
     elif now.time() >= time(15) and newest.time() >= time(14, 57):
         result["market_state"] = "closed_next_day_observation_only"
@@ -156,51 +164,36 @@ def _parse_quotes(rows: list[Any], now: datetime, result: dict[str, Any], min_co
 
 
 def fetch_snapshot(
-    api_key: str,
     *,
     now: datetime | None = None,
-    session_factory: type[requests.Session] = requests.Session,
+    spot_df: pd.DataFrame | None = None,
     min_coverage: int = _MIN_COVERAGE,
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
-    """Fetch one full-A response without proxy inheritance or stale-cache fallback."""
+    """Fetch one full-A spot snapshot without API keys or stale-cache fallback."""
     observed = (now or datetime.now(_BEIJING)).astimezone(_BEIJING)
-    result = _base_result(observed)
-    session = session_factory()
-    session.trust_env = False
-    try:
-        response = session.get(
-            f"{TICKFLOW_BASE_URL}/v1/quotes",
-            params={"universes": _UNIVERSE},
-            headers={"x-api-key": api_key},
-            timeout=(3, 12),
-            allow_redirects=False,
-        )
-        received = datetime.now(_BEIJING)
-        result.update(
-            http_status=response.status_code,
-            response_bytes=len(response.content),
-            cf_ray=response.headers.get("CF-RAY"),
-            server_time=response.headers.get("Date"),
-            received_time=received.isoformat(timespec="seconds"),
-        )
-        if response.status_code != 200:
-            result.update(failure="HTTP_ERROR", error_code=_error_code(response))
-            return result, []
+    received = datetime.now(_BEIJING)
+    if spot_df is None:
         try:
-            payload = response.json()
-        except ValueError:
-            result["failure"] = "INVALID_JSON"
+            spot_df = fetch_spot_dataframe()
+        except Exception as exc:
+            result = _base_result(observed, _SPOT_BASIS)
+            result.update(
+                failure="SPOT_FETCH_ERROR",
+                exception_type=type(exc).__name__,
+                received_time=received.isoformat(timespec="seconds"),
+            )
             return result, []
-        rows = payload.get("data") if isinstance(payload, dict) else None
-        if not isinstance(rows, list):
-            result["failure"] = "INVALID_PAYLOAD"
-            return result, []
-        return result, _parse_quotes(rows, observed if now is not None else received, result, min_coverage)
-    except requests.RequestException as exc:
-        result.update(failure="NETWORK_ERROR", exception_type=type(exc).__name__)
+    if not isinstance(spot_df, pd.DataFrame) or spot_df.empty or not {"代码", "最新价"}.issubset(spot_df.columns):
+        result = _base_result(observed, _SPOT_BASIS)
+        result["failure"] = "INVALID_PAYLOAD"
         return result, []
-    finally:
-        session.close()
+    basis = _detect_basis(spot_df)
+    result = _base_result(observed, basis)
+    result.update(
+        row_count=len(spot_df),
+        received_time=received.isoformat(timespec="seconds"),
+    )
+    return result, _parse_quotes(spot_df, observed if now is not None else received, result, min_coverage)
 
 
 def _write_json(payload: dict[str, Any]) -> None:
@@ -211,21 +204,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--interactive", action="store_true", help="Page through the in-memory candidate pool")
     args = parser.parse_args()
-    from cli.auth import load_config
-
-    try:
-        key = os.getenv("TICKFLOW_API_KEY") or str(load_config().get("tickflow_api_key") or "")
-    except Exception:
-        result = _base_result(datetime.now(_BEIJING))
-        result["failure"] = "LOCAL_AUTH_UNAVAILABLE"
-        _write_json(result)
-        return 1
-    if not key.strip():
-        result = _base_result(datetime.now(_BEIJING))
-        result["failure"] = "LOCAL_AUTH_MISSING"
-        _write_json(result)
-        return 1
-    result, candidates = fetch_snapshot(key.strip())
+    result, candidates = fetch_snapshot()
     _write_json(result)
     if not result["ok"] or not args.interactive:
         return 0 if result["ok"] else 1

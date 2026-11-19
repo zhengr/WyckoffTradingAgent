@@ -1,8 +1,6 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import { Download, FileSpreadsheet, Loader2, Package } from 'lucide-react'
 import { StockSearchBox, matchesSelectedQuery, useStockSearch, type StockSearchController } from '@/components/stock-search-box'
-import { supabase } from '@/lib/supabase'
-import { useAuthStore } from '@/stores/auth'
 import { usePreferences } from '@/lib/preferences'
 import { resolveStockQuery } from '@/lib/market-search'
 import {
@@ -14,7 +12,7 @@ import {
   exportSymbolFromStock,
   normalizeExportSymbol,
   parseExportSymbols,
-  parseTickFlowToRows,
+  parseKlineToRows,
   type ExportAdjust,
   type ExportDataset,
   type ExportRow,
@@ -37,19 +35,9 @@ interface ExportFetchParams {
   adjust: ExportAdjust
 }
 
-async function getTickFlowKey(userId: string): Promise<string | null> {
-  const { data } = await supabase
-    .from('user_settings')
-    .select('tickflow_api_key')
-    .eq('user_id', userId)
-    .single()
-  return data?.tickflow_api_key || null
-}
-
 export function ExportPage() {
-  const user = useAuthStore((s) => s.user)
   const { t } = usePreferences()
-  const state = useExportState(user?.id)
+  const state = useExportState()
 
   return (
     <div className="flex h-full flex-col p-6">
@@ -66,7 +54,7 @@ export function ExportPage() {
   )
 }
 
-function useExportState(userId: string | undefined) {
+function useExportState() {
   const { t } = usePreferences()
   const [mode, setMode] = useState<ExportMode>('single')
   const search = useStockSearch('export')
@@ -95,11 +83,6 @@ function useExportState(userId: string | undefined) {
   const previewRows = useMemo(() => selectColumns(activeRows.slice(0, 10), columnsFromSet(columnSet, columns)), [activeRows, columnSet, columns])
 
   async function handleExport() {
-    const apiKey = userId ? await getTickFlowKey(userId) : null
-    if (!apiKey) {
-      setError(t('export.configureTickflow'))
-      return
-    }
     const validation = await resolveExportSymbols(mode, search, batchText, t)
     if (validation.error) {
       setError(validation.error)
@@ -111,7 +94,7 @@ function useExportState(userId: string | undefined) {
     }
     resetExportOutput(setError, setDatasets, setBatchResults, setActiveIndex, setSelectedColumns, setColumnFilter)
     setLoading(true)
-    const result = await collectExportDatasets(apiKey, validation.symbols, { days, endOffset, adjust })
+    const result = await collectExportDatasets(validation.symbols, { days, endOffset, adjust })
     setDatasets(result.datasets)
     setBatchResults(result.batchResults)
     setError(result.datasets.length ? '' : t('export.failed'))
@@ -256,12 +239,12 @@ async function resolveSingleExportSymbol(
   return exportSymbolFromStock(await resolveStockQuery(raw))
 }
 
-async function collectExportDatasets(apiKey: string, symbols: string[], params: ExportFetchParams) {
+async function collectExportDatasets(symbols: string[], params: ExportFetchParams) {
   const batchResults: BatchResult[] = []
   const datasets: ExportDataset[] = []
   for (const item of symbols) {
     try {
-      const dataset = await fetchDataset(apiKey, item, params.days, params.endOffset, params.adjust)
+      const dataset = await fetchDataset(item, params.days, params.endOffset, params.adjust)
       datasets.push(dataset)
       batchResults.push({ symbol: item, status: 'ok', rows: dataset.rawRows.length, error: '' })
     } catch (err) {
@@ -391,13 +374,11 @@ function ColumnPicker(props: {
   )
 }
 
-async function fetchDataset(apiKey: string, symbol: string, days: number, endOffset: number, adjust: ExportAdjust): Promise<ExportDataset> {
+async function fetchDataset(symbol: string, days: number, endOffset: number, adjust: ExportAdjust): Promise<ExportDataset> {
   const params = buildKlineParams(symbol, days, endOffset, adjust)
-  const resp = await fetch(`/api/llm-proxy/v1/klines?${params}`, {
-    headers: { 'x-api-key': apiKey, 'X-Target-URL': 'https://api.tickflow.org' },
-  })
-  if (!resp.ok) throw new Error(`TickFlow ${resp.status}: ${(await resp.text()).slice(0, 180)}`)
-  const rawRows = parseTickFlowToRows(await resp.json())
+  const resp = await fetch(`/api/kline?${params}`)
+  if (!resp.ok) throw new Error(`服务端行情 ${resp.status}: ${(await resp.text()).slice(0, 180)}`)
+  const rawRows = parseKlineToRows(await resp.json())
   if (!rawRows.length) throw new Error('no data')
   return { symbol, fileStem: safeStem(symbol), rawRows, enhancedRows: buildEnhancedRows(rawRows) }
 }

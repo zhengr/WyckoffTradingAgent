@@ -7,7 +7,7 @@ import logging
 from datetime import timedelta
 from typing import Any
 
-from agents.tool_context import ToolContext, get_credential
+from agents.tool_context import ToolContext
 from utils.trading_clock import cn_today
 
 logger = logging.getLogger(__name__)
@@ -75,14 +75,25 @@ def intraday_analysis(code: str, tool_context: ToolContext | None = None) -> dic
     try:
         from core.intraday_analysis import analyze_intraday
 
-        client, error = _tickflow_client(tool_context)
+        minute_source, error = _minute_source()
         if error:
             return error
-        df_1m = client.get_intraday(code, period="1m", count=500)
+        try:
+            df_1m = minute_source.fetch_intraday(code, period="1m", count=500)
+        except Exception as e:
+            return {"error": f"{code} 获取 1m 分钟线失败: {e}"}
         if df_1m is None or df_1m.empty:
             return {"error": f"{code} 无法获取分钟线数据，可能非交易时段"}
-        df_5m = client.get_intraday(code, period="5m", count=100)
-        df_15m = client.get_intraday(code, period="15m", count=50)
+        try:
+            df_5m = minute_source.fetch_intraday(code, period="5m", count=100)
+        except Exception:
+            logger.debug("5m intraday unavailable for %s", code, exc_info=True)
+            df_5m = None
+        try:
+            df_15m = minute_source.fetch_intraday(code, period="15m", count=50)
+        except Exception:
+            logger.debug("15m intraday unavailable for %s", code, exc_info=True)
+            df_15m = None
         return {"code": code, **analyze_intraday(df_1m, df_5m, df_15m).to_dict()}
     except Exception as e:
         logger.exception("intraday_analysis error")
@@ -94,14 +105,17 @@ def intraday_rescue_check(code: str, tool_context: ToolContext | None = None) ->
     try:
         from core.intraday_analysis import analyze_rescue_structure
 
-        client, error = _tickflow_client(tool_context)
+        minute_source, error = _minute_source()
         if error:
             return error
-        df_60m = client.get_klines(code, period="60m", count=100)
+        try:
+            df_60m = minute_source.fetch_minute_hist(code, period="60m", count=100)
+        except Exception as e:
+            return {"error": f"{code} 获取 60m 分钟线失败: {e}"}
         if df_60m is None or df_60m.empty:
             return {"error": f"{code} 无法获取 60m 数据，可能非交易时段"}
         try:
-            df_30m = client.get_klines(code, period="30m", count=100)
+            df_30m = minute_source.fetch_minute_hist(code, period="30m", count=100)
         except Exception:
             logger.debug("30m klines unavailable for %s", code, exc_info=True)
             df_30m = None
@@ -111,10 +125,13 @@ def intraday_rescue_check(code: str, tool_context: ToolContext | None = None) ->
         return {"error": str(e)}
 
 
-def _tickflow_client(tool_context: ToolContext | None) -> tuple[Any, dict | None]:
-    from integrations.tickflow_client import TickFlowClient
+def _minute_source() -> tuple[Any, dict | None]:
+    """分钟线数据源（integrations.data_source_minute，无需 API key）。
 
-    api_key = get_credential(tool_context, "tickflow_api_key", "TICKFLOW_API_KEY")
-    if not api_key:
-        return None, {"error": "未配置 TICKFLOW_API_KEY，无法获取分钟线数据"}
-    return TickFlowClient(api_key=api_key), None
+    模块不可用（尚未就绪/未安装）时返回明确 error，而不是静默空数据。
+    """
+    try:
+        import integrations.data_source_minute as minute_source
+    except ImportError as exc:
+        return None, {"error": f"分钟线数据源不可用（integrations.data_source_minute 导入失败）: {exc}"}
+    return minute_source, None

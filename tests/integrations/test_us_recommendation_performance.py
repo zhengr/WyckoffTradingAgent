@@ -116,21 +116,13 @@ def test_build_us_performance_updates_anchors_window_row_to_its_own_date():
     assert updates[0]["mfe_pct"] == 10.0
 
 
-def test_refresh_us_tracking_performance_fetches_forward_adjusted_hist(monkeypatch):
+def test_refresh_us_tracking_performance_fetches_daily_bars(monkeypatch):
     captured: dict[str, object] = {}
 
-    class FakeTickFlowClient:
-        def __init__(self, api_key):
-            assert api_key == "key"
+    def fake_market_data(_api_key, symbols, batch_size):
+        captured["symbols"] = symbols
+        return {}, {"SPLT.US": pd.DataFrame({"date": ["2026-05-15"], "high": [26.0], "low": [24.0], "close": [25.0]})}
 
-        def get_klines_batch(self, symbols, *, period, count, adjust):
-            captured["adjust"] = adjust
-            assert symbols == ["SPLT.US"]
-            assert period == "1d"
-            assert count == 5
-            return {"SPLT.US": pd.DataFrame({"date": ["2026-05-15"], "high": [26.0], "low": [24.0], "close": [25.0]})}
-
-    monkeypatch.setenv("TICKFLOW_API_KEY", "key")
     monkeypatch.setenv("WYCKOFF_WRITE_CONTEXT", "server_job")
     monkeypatch.setattr("integrations.recommendation_performance.is_admin_configured", lambda: True)
     monkeypatch.setattr("integrations.recommendation_performance.create_admin_client", lambda: object())
@@ -139,35 +131,30 @@ def test_refresh_us_tracking_performance_fetches_forward_adjusted_hist(monkeypat
         lambda *_args: [{"id": 1, "code": "SPLT.US", "recommend_date": 20260515, "initial_price": 100.0}],
     )
     monkeypatch.setattr("integrations.recommendation_performance.upsert_to_table", lambda *_args, **_kwargs: 1)
-    monkeypatch.setattr("integrations.tickflow_client.TickFlowClient", FakeTickFlowClient)
+    monkeypatch.setattr("integrations.recommendation_performance.fetch_tracking_market_data", fake_market_data)
 
     summary = refresh_us_tracking_performance(max_dates=1, kline_count=5)
 
-    assert captured["adjust"] == "forward"
+    assert captured["symbols"] == ["SPLT.US"]
     assert summary["rows_updated"] == 1
 
 
 def test_refresh_tracking_performance_updates_only_window_rows(monkeypatch):
     written: list[list[dict]] = []
 
-    class FakeTickFlowClient:
-        def __init__(self, api_key):
-            assert api_key == "key"
+    def fake_market_data(_api_key, symbols, batch_size):
+        assert symbols == ["ABC.US"]
+        return {}, {
+            "ABC.US": pd.DataFrame(
+                {
+                    "date": ["2026-01-02", "2026-07-30", "2026-07-31"],
+                    "high": [10.5, 21.0, 22.0],
+                    "low": [9.5, 19.0, 20.0],
+                    "close": [10.0, 20.0, 21.0],
+                }
+            )
+        }
 
-        def get_klines_batch(self, symbols, *, period, count, adjust):
-            assert symbols == ["ABC.US"]
-            return {
-                "ABC.US": pd.DataFrame(
-                    {
-                        "date": ["2026-01-02", "2026-07-30", "2026-07-31"],
-                        "high": [10.5, 21.0, 22.0],
-                        "low": [9.5, 19.0, 20.0],
-                        "close": [10.0, 20.0, 21.0],
-                    }
-                )
-            }
-
-    monkeypatch.setenv("TICKFLOW_API_KEY", "key")
     monkeypatch.setenv("WYCKOFF_WRITE_CONTEXT", "server_job")
     monkeypatch.setattr("integrations.recommendation_performance.is_admin_configured", lambda: True)
     monkeypatch.setattr("integrations.recommendation_performance.create_admin_client", lambda: object())
@@ -182,7 +169,7 @@ def test_refresh_tracking_performance_updates_only_window_rows(monkeypatch):
         "integrations.recommendation_performance.upsert_to_table",
         lambda _client, _table, updates, **_kwargs: written.append(list(updates)) or len(updates),
     )
-    monkeypatch.setattr("integrations.tickflow_client.TickFlowClient", FakeTickFlowClient)
+    monkeypatch.setattr("integrations.recommendation_performance.fetch_tracking_market_data", fake_market_data)
 
     summary = refresh_tracking_performance("us", max_dates=1, kline_count=5)
 
@@ -214,21 +201,13 @@ def test_build_market_performance_updates_keeps_cn_code_numeric():
     assert updates[0]["mfe_pct"] == 4.76
 
 
-def test_refresh_tracking_performance_normalizes_cn_symbols(monkeypatch):
+def test_refresh_tracking_performance_uses_cn_code_as_symbol(monkeypatch):
     captured: dict[str, object] = {}
 
-    class FakeTickFlowClient:
-        def __init__(self, api_key):
-            assert api_key == "key"
+    def fake_market_data(_api_key, symbols, batch_size):
+        captured["symbols"] = symbols
+        return {}, {"600519": pd.DataFrame({"date": ["2026-05-15"], "high": [11.0], "low": [9.0], "close": [10.0]})}
 
-        def get_klines_batch(self, symbols, *, period, count, adjust):
-            captured["symbols"] = symbols
-            captured["adjust"] = adjust
-            assert period == "1d"
-            assert count == 5
-            return {"600519.SH": pd.DataFrame({"date": ["2026-05-15"], "high": [11.0], "low": [9.0], "close": [10.0]})}
-
-    monkeypatch.setenv("TICKFLOW_API_KEY", "key")
     monkeypatch.setenv("WYCKOFF_WRITE_CONTEXT", "server_job")
     monkeypatch.setattr("integrations.recommendation_performance.is_admin_configured", lambda: True)
     monkeypatch.setattr("integrations.recommendation_performance.create_admin_client", lambda: object())
@@ -237,12 +216,11 @@ def test_refresh_tracking_performance_normalizes_cn_symbols(monkeypatch):
         lambda *_args: [{"id": 1, "code": 600519, "recommend_date": 20260515, "initial_price": 10.0}],
     )
     monkeypatch.setattr("integrations.recommendation_performance.upsert_to_table", lambda *_args, **_kwargs: 1)
-    monkeypatch.setattr("integrations.tickflow_client.TickFlowClient", FakeTickFlowClient)
-    monkeypatch.setattr("integrations.tickflow_client.normalize_cn_symbol", lambda code: f"{code}.SH")
+    monkeypatch.setattr("integrations.recommendation_performance.fetch_tracking_market_data", fake_market_data)
 
     summary = refresh_tracking_performance("cn", max_dates=1, kline_count=5)
 
-    assert captured == {"symbols": ["600519.SH"], "adjust": "forward"}
+    assert captured == {"symbols": ["600519"]}
     assert summary["rows_updated"] == 1
 
 

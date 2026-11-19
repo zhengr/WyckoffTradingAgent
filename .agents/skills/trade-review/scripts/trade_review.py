@@ -2,14 +2,13 @@
 """Personal A-share trade review: fills -> round trips -> attribution -> exit-rule replay.
 
 Inputs are the user's own fills (never committed). Outputs go to a directory outside the repo.
-Daily bars are fetched from TickFlow with ``adjust="none"`` so they line up with real fill prices.
+Daily bars are fetched unadjusted so they line up with real fill prices.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
-import os
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -83,10 +82,25 @@ class RoundTrip:
         return int((self.fills["side"] == "buy").sum())
 
 
+def _normalize_cn_code(raw: str) -> str:
+    """A-share ledger key: 6-digit code with the exchange suffix."""
+    text = str(raw or "").strip().upper()
+    if not text:
+        return ""
+    if "." in text and len(text.split(".", 1)[0]) == 6:
+        return text
+    digits = "".join(ch for ch in text if ch.isdigit())
+    if len(digits) != 6:
+        return text
+    if digits.startswith(("0", "1", "2", "3")):
+        return f"{digits}.SZ"
+    if digits.startswith(("4", "8", "9")):
+        return f"{digits}.BJ"
+    return f"{digits}.SH"
+
+
 def load_fills(path: str | Path) -> pd.DataFrame:
     """Read a fills CSV: name,code,date,side,price,qty,amount,fee (code may be blank)."""
-    from integrations.tickflow_client import normalize_cn_symbol
-
     df = pd.read_csv(path, encoding="utf-8-sig", dtype={"code": str})
     need = {"name", "date", "side", "price", "qty", "amount", "fee"}
     missing = need - set(df.columns)
@@ -97,7 +111,7 @@ def load_fills(path: str | Path) -> pd.DataFrame:
     # Blank CSV name cells become NaN; strip so groupby cannot split one stock's ledger.
     df["name"] = df["name"].fillna("").astype(str).str.strip()
     df["code"] = df["code"].fillna("").astype(str).str.strip().str.upper()
-    df["code"] = df["code"].map(lambda c: normalize_cn_symbol(c) if c else "")
+    df["code"] = df["code"].map(lambda c: _normalize_cn_code(c) if c else "")
     df["side"] = df["side"].astype(str).str.strip().str.lower()
     bad = sorted(set(df["side"]) - {"buy", "sell"})
     if bad:
@@ -176,7 +190,7 @@ def limit_pct(code: str, name: str = "") -> float:
 
 
 def prepare_bars(raw: pd.DataFrame) -> pd.DataFrame:
-    """Normalize a TickFlow kline frame to d/open/high/low/close/pc sorted by date."""
+    """Normalize a daily-bar frame to d/open/high/low/close/pc sorted by date."""
     df = raw.copy()
     if "d" not in df.columns:
         ts = pd.to_datetime(df["timestamp"], unit="ms", utc=True)
@@ -186,28 +200,60 @@ def prepare_bars(raw: pd.DataFrame) -> pd.DataFrame:
     return df[["d", "open", "high", "low", "close", "pc"]]
 
 
-def fetch_bars(codes: list[str], count: int = 500) -> dict[str, pd.DataFrame]:
-    from integrations.tickflow_client import TickFlowClient
+_HIST_COLUMN_MAP = {
+    "日期": "d",
+    "开盘": "open",
+    "最高": "high",
+    "最低": "low",
+    "收盘": "close",
+}
 
-    client = TickFlowClient(api_key=os.environ.get("TICKFLOW_API_KEY", ""))
+
+def _bars_from_hist(frame: pd.DataFrame, count: int) -> pd.DataFrame | None:
+    if frame is None or frame.empty:
+        return None
+    work = frame.rename(columns=_HIST_COLUMN_MAP).copy()
+    if not {"d", "open", "high", "low", "close"}.issubset(work.columns):
+        return None
+    return prepare_bars(work.tail(max(int(count), 1)))
+
+
+def fetch_bars(codes: list[str], count: int = 500) -> dict[str, pd.DataFrame]:
+    """Unadjusted daily bars: A-share fallback chain, HK/US via the Tencent provider."""
+    from datetime import date, timedelta
+
+    from integrations.data_source import fetch_stock_hist
+    from integrations.data_source_hk_us import fetch_stock_hk_us, is_hk_us_symbol
+
+    end = date.today()
+    start = end - timedelta(days=max(int(count) * 2, 400))
     out: dict[str, pd.DataFrame] = {}
     for code in codes:
-        raw = client.get_klines(code, period="1d", count=count, adjust="none")
-        if raw is not None and not raw.empty:
-            out[code] = prepare_bars(raw)
+        try:
+            if is_hk_us_symbol(code):
+                raw = fetch_stock_hk_us(code, start.strftime("%Y%m%d"), end.strftime("%Y%m%d"), "")
+            else:
+                raw = fetch_stock_hist(code, start.strftime("%Y%m%d"), end.strftime("%Y%m%d"), "")
+        except Exception as exc:
+            print(f"[WARN] no daily bars for {code}: {type(exc).__name__}", file=sys.stderr)
+            continue
+        bars = _bars_from_hist(raw, count)
+        if bars is not None:
+            out[code] = bars
     return out
 
 
 def resolve_codes(fills: pd.DataFrame) -> pd.DataFrame:
-    """Fill blank ``code`` cells by exact A-share name match from a TickFlow quote snapshot."""
+    """Fill blank ``code`` cells by exact A-share name match from the cached stock list."""
     blank = fills["code"] == ""
     if not blank.any():
         return fills
-    from integrations.tickflow_client import TickFlowClient
+    from integrations.fetch_a_share_csv import get_all_stocks
 
-    client = TickFlowClient(api_key=os.environ.get("TICKFLOW_API_KEY", ""))
-    quotes = client.get_quotes(universes=["CN_Equity_A"])
-    name_to_code = {str((q.get("ext") or {}).get("name", "")).replace(" ", ""): sym for sym, q in quotes.items()}
+    name_to_code = {
+        str(stock.get("name", "")).replace(" ", ""): _normalize_cn_code(stock.get("code", ""))
+        for stock in get_all_stocks()
+    }
     fills = fills.copy()
     fills.loc[blank, "code"] = fills.loc[blank, "name"].str.replace(" ", "").map(name_to_code).fillna("")
     return fills

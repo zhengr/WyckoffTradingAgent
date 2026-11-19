@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 import json
-import os
 import random
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 import pandas as pd
@@ -165,23 +164,7 @@ def _fetch_one(
         return (symbol, None, str(e), time.monotonic() - t0)
 
 
-def _tickflow_window(prefetch_start: str, end_s: str) -> tuple[int, int, int, str, str]:
-    start_d = datetime.strptime(prefetch_start, "%Y%m%d").date()
-    end_d = datetime.strptime(end_s, "%Y%m%d").date()
-    cn_tz = timezone(timedelta(hours=8))
-    start_ms = int(datetime.combine(start_d, datetime.min.time(), tzinfo=cn_tz).timestamp() * 1000)
-    end_ms = int(
-        (
-            datetime.combine(end_d + timedelta(days=1), datetime.min.time(), tzinfo=cn_tz) - timedelta(milliseconds=1)
-        ).timestamp()
-        * 1000
-    )
-    day_span = (end_d - start_d).days + 1
-    count = min(max(day_span * 2 + 16, 64), 5000)
-    return start_ms, end_ms, count, start_d.isoformat(), end_d.isoformat()
-
-
-def _frame_from_tickflow_batch(
+def _frame_from_batch(
     sym: str,
     raw_df: pd.DataFrame | None,
     start_iso: str,
@@ -222,52 +205,12 @@ def _frame_from_tickflow_batch(
     return df, None
 
 
-def _fetch_batch_tickflow(
-    symbols: list[str], prefetch_start: str, end_s: str
-) -> tuple[list[pd.DataFrame], int, int, list[str]]:
-    """用 TickFlow batch API 批量拉取，减少 API 调用次数。"""
-    from integrations.tickflow_client import TickFlowClient, normalize_cn_symbol
-
-    api_key = os.getenv("TICKFLOW_API_KEY", "").strip()
-    if not api_key:
-        raise RuntimeError("TICKFLOW_API_KEY 未配置")
-    client = TickFlowClient(api_key=api_key)
-    start_ms, end_ms, count, start_iso, end_iso = _tickflow_window(prefetch_start, end_s)
-    batch_result = client.get_klines_batch(
-        symbols,
-        period="1d",
-        count=count,
-        start_time_ms=start_ms,
-        end_time_ms=end_ms,
-        adjust="forward",
-    )
-
-    all_frames: list[pd.DataFrame] = []
-    fail_samples: list[str] = []
-    fail = 0
-    for sym in symbols:
-        df, error = _frame_from_tickflow_batch(sym, batch_result.get(normalize_cn_symbol(sym)), start_iso, end_iso)
-        if error:
-            fail += 1
-            if len(fail_samples) < 10:
-                fail_samples.append(f"{sym}: {error}")
-            continue
-        all_frames.append(df)
-    ok = len(all_frames)
-    return all_frames, ok, fail, fail_samples
-
-
 def _snapshot_range(args) -> SnapshotRange:
     start_s = _as_yyyymmdd(args.start)
     end_s = _as_yyyymmdd(args.end)
     start_dt = datetime.strptime(start_s, "%Y%m%d").date()
     prefetch_start = (start_dt - timedelta(days=int(args.trading_days * 2))).strftime("%Y%m%d")
     return SnapshotRange(start=start_s, end=end_s, prefetch_start=prefetch_start)
-
-
-def _tickflow_batch_enabled() -> bool:
-    tf_disabled = env_flag("DATA_SOURCE_DISABLE_TICKFLOW")
-    return bool(os.getenv("TICKFLOW_API_KEY", "").strip()) and not tf_disabled
 
 
 def _fetch_concurrent(
@@ -304,12 +247,6 @@ def _fetch_snapshot_frames(
     end_s: str,
     max_workers: int,
 ) -> tuple[list[pd.DataFrame], int, int, list[str]]:
-    if _tickflow_batch_enabled():
-        print("[snapshot] fetch模式: TickFlow batch API (每批200只，顺序请求避免限流)")
-        try:
-            return _fetch_batch_tickflow(symbols, prefetch_start, end_s)
-        except Exception as exc:
-            print(f"[snapshot] batch 模式失败: {exc}，回退逐只并发模式")
     return _fetch_concurrent(symbols, prefetch_start, end_s, max_workers)
 
 
@@ -366,12 +303,13 @@ def _write_json(path: Path, payload: object) -> None:
 
 
 def _write_optional_maps(out_dir: Path, symbols: list[str], since: str) -> None:
-    api_key = os.getenv("TICKFLOW_API_KEY", "").strip()
-    if api_key and since:
+    if since:
         try:
-            history = fetch_financial_history(api_key, symbols, since=date.fromisoformat(since))
-            _write_json(out_dir / "financial_history.json", history)
-            print(f"[snapshot] financial_history.json: {len(history)} symbols")
+            # api_key 仅为签名兼容保留（财务历史现走 tushare.fina_indicator）。
+            history = fetch_financial_history("", symbols, since=date.fromisoformat(since))
+            if history:
+                _write_json(out_dir / "financial_history.json", history)
+                print(f"[snapshot] financial_history.json: {len(history)} symbols")
         except Exception as exc:
             print(f"[snapshot] financial_history 拉取失败（不阻塞）: {exc}")
 

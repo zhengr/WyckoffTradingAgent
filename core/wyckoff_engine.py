@@ -471,7 +471,7 @@ def build_layer2_evaluation_context(
 
 
 def dollar_volume_series(df_sorted: pd.DataFrame) -> pd.Series:
-    """成交额序列：amount 字段缺失/恒为 0（如 TickFlow 港股/美股数据源限制）时回退为 close*volume。
+    """成交额序列：amount 字段缺失/恒为 0（如港股/美股数据源限制）时回退为 close*volume。
 
     供 core 层 L1 流动性过滤与 workflows 层港股风险门禁/回测共用，
     确保同一份历史数据在不同调用方下的"成交额"口径一致。
@@ -557,7 +557,7 @@ def layer1_filter(
     """
     硬过滤：剔除 ST、非目标板块、市值<阈值、近期均成交额<阈值。
     market_cap_map 单位：亿元。若 market_cap_map 为空则跳过市值过滤。
-    financial_map 来自 TickFlow，可选；有则追加 ROE / 资产负债率硬过滤。
+    financial_map 可选；有则追加 ROE / 资产负债率硬过滤。
     """
     fin_available = bool(financial_map)
     passed: list[str] = []

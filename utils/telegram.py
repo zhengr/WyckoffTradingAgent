@@ -6,8 +6,6 @@ import os
 
 import requests
 
-from integrations.tickflow_notice import append_tickflow_limit_hint
-
 TELEGRAM_MAX_LEN = 3900
 
 
@@ -57,7 +55,6 @@ def _telegram_payload(chat_id: str, chunk: str, idx: int, total: int) -> dict:
 def send_to_telegram(message_text: str, *, tg_bot_token: str, tg_chat_id: str) -> bool:
     token = str(tg_bot_token or "").strip()
     chat_id = str(tg_chat_id or "").strip()
-    message_text = append_tickflow_limit_hint(message_text)
     if not token or not chat_id:
         print("[telegram] tg_bot_token/tg_chat_id 未配置，跳过 Telegram 推送")
         return False

@@ -4,7 +4,7 @@ import logging
 from datetime import datetime, timedelta
 from typing import Any
 
-from agents.tool_context import ToolContext, ensure_tushare_token, get_credential
+from agents.tool_context import ToolContext, ensure_tushare_token
 from utils.safe import safe_float
 from utils.trading_clock import cn_today
 
@@ -274,18 +274,19 @@ def _finalize_market_history_frame(df, days: int):
 
 
 def fetch_market_history_frame(symbol: str, days: int, tool_context: ToolContext | None) -> tuple[Any, str, list[str]]:
+    """A 股历史日线：走统一入口 stock_hist_repository（tushare→akshare→…→tencent/sina）。"""
     errors: list[str] = []
-    api_key = get_credential(tool_context, "tickflow_api_key", "TICKFLOW_API_KEY")
-    if api_key:
-        try:
-            from integrations.tickflow_client import TickFlowClient
+    try:
+        from integrations.stock_hist_repository import get_stock_hist, normalize_hist_df
 
-            client = TickFlowClient(api_key=api_key)
-            return client.get_klines(symbol, period="1d", count=days, adjust="none"), "tickflow", errors
-        except Exception as e:
-            errors.append(f"tickflow: {e}")
-    else:
-        errors.append("tickflow: TICKFLOW_API_KEY 未配置")
+        end = cn_today()
+        start = end - timedelta(days=int(days * 2.4) + 30)
+        raw = get_stock_hist(symbol, start, end, adjust="")
+        if raw is not None and not raw.empty:
+            return normalize_hist_df(raw), "stock_hist", errors
+        errors.append("stock_hist: 无数据")
+    except Exception as e:
+        errors.append(f"stock_hist: {e}")
     return _fetch_market_history_fallback(symbol, days, tool_context, errors)
 
 

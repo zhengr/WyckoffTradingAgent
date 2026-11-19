@@ -20,13 +20,11 @@ export type ValueSnapshotReason = 'unsupported-market' | 'missing-source' | 'not
 
 export interface ValueSnapshot {
   symbol: string
-  source: 'tickflow' | 'tushare' | 'none'
+  source: 'tushare' | 'none'
   metrics: FundamentalMetric | null
   reason?: ValueSnapshotReason
   fetched_at?: string
 }
-
-export const TICKFLOW_PURCHASE = 'https://tickflow.org/auth/register?ref=5N4NKTCPL4'
 
 type Fetcher = typeof globalThis.fetch
 
@@ -39,13 +37,13 @@ export function isCnSymbol(code: string): boolean {
   return /^\d{6}$/.test(code.trim())
 }
 
-export function isTickFlowMarketSymbol(code: string): boolean {
+export function isNonCnMarketSymbol(code: string): boolean {
   const c = code.trim().toUpperCase()
   return /^\d{5}\.HK$/.test(c) || /^[A-Z][A-Z0-9.-]{0,15}\.US$/.test(c)
 }
 
 export function isSupportedKlineCode(code: string): boolean {
-  return isCnSymbol(code) || isTickFlowMarketSymbol(code)
+  return isCnSymbol(code) || isNonCnMarketSymbol(code)
 }
 
 /** Normalize holdings codes: CN 6-digit, HK NNNNN.HK, US TICKER.US. Empty if unsupported.
@@ -56,10 +54,10 @@ export function normalizePortfolioCode(raw: string | number): string {
   if (isCnSymbol(c)) return c
   const hk = c.match(/^(\d{1,5})\.HK$/)
   if (hk) return `${hk[1]!.padStart(5, '0')}.HK`
-  if (isTickFlowMarketSymbol(c)) return c
+  if (isNonCnMarketSymbol(c)) return c
   if (/^[A-Z][A-Z0-9.-]{0,15}$/.test(c)) {
     const withUs = `${c}.US`
-    return isTickFlowMarketSymbol(withUs) ? withUs : ''
+    return isNonCnMarketSymbol(withUs) ? withUs : ''
   }
   return ''
 }
@@ -75,9 +73,9 @@ export function detectMarket(code: string): 'cn' | 'hk' | 'us' {
   return 'us'
 }
 
-export function normalizeTickFlowSymbol(code: string): string {
+export function normalizeMarketSymbol(code: string): string {
   const c = code.trim().toUpperCase()
-  if (isTickFlowMarketSymbol(c)) return c
+  if (isNonCnMarketSymbol(c)) return c
   if (!isCnSymbol(c)) return c
   if (c.startsWith('0') || c.startsWith('1') || c.startsWith('2') || c.startsWith('3')) return `${c}.SZ`
   if (c.startsWith('4') || c.startsWith('8') || c.startsWith('9')) return `${c}.BJ`
@@ -95,32 +93,15 @@ export function normalizeTushareCode(code: string): string {
 export async function fetchValueSnapshotWithFetch(
   fetcher: Fetcher,
   code: string,
-  keys: { tickflow: string | null; tushare: string | null },
+  keys: { tushare: string | null },
 ): Promise<ValueSnapshot> {
-  const symbol = isCnSymbol(code) ? normalizeTickFlowSymbol(code) : code.trim().toUpperCase()
+  const symbol = isCnSymbol(code) ? normalizeMarketSymbol(code) : code.trim().toUpperCase()
   const fetched_at = new Date().toISOString()
   if (!isCnSymbol(code)) return { symbol, source: 'none', metrics: null, reason: 'unsupported-market', fetched_at }
-  if (!keys.tickflow && !keys.tushare) return { symbol, source: 'none', metrics: null, reason: 'missing-source', fetched_at }
-  const tickflow = keys.tickflow ? await tryTickFlowSnapshot(fetcher, code, keys.tickflow) : null
-  if (tickflow) return { symbol, source: 'tickflow', metrics: tickflow, fetched_at }
-  const tushare = keys.tushare ? await tryTushareSnapshot(fetcher, code, keys.tushare) : null
+  if (!keys.tushare) return { symbol, source: 'none', metrics: null, reason: 'missing-source', fetched_at }
+  const tushare = await tryTushareSnapshot(fetcher, code, keys.tushare)
   if (tushare) return { symbol, source: 'tushare', metrics: tushare, fetched_at }
   return { symbol, source: 'none', metrics: null, reason: 'not-found', fetched_at }
-}
-
-async function tryTickFlowSnapshot(fetcher: Fetcher, code: string, apiKey: string): Promise<FundamentalMetric | null> {
-  try {
-    const symbol = normalizeTickFlowSymbol(code)
-    const params = new URLSearchParams({ symbols: symbol, latest: 'true' })
-    const resp = await fetcher(`/api/llm-proxy/v1/financials/metrics?${params}`, {
-      headers: { 'x-api-key': apiKey, 'X-Target-URL': 'https://api.tickflow.org' },
-    })
-    if (!resp.ok) return null
-    const record = findFinancialRecord(await resp.json(), symbol)
-    return record ? normalizeFinancialRecord(record, symbol) : null
-  } catch {
-    return null
-  }
 }
 
 async function tryTushareSnapshot(fetcher: Fetcher, code: string, token: string): Promise<FundamentalMetric | null> {

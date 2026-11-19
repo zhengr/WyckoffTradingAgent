@@ -11,8 +11,8 @@ export interface SettingsCapabilityCredentials {
 }
 
 export interface SettingsCapabilityInput {
-  tickflow?: string | null
-  savedTickflow?: string | null
+  tushare?: string | null
+  savedTushare?: string | null
   modelProviderLabel: string
   modelConfig?: SettingsCapabilityCredentials
   savedModelConfig?: SettingsCapabilityCredentials
@@ -44,7 +44,7 @@ export interface SettingsCapabilitySummary {
   unsavedCount: number
   missingCount: number
   totalCount: number
-  hasCrossMarketKline: boolean
+  hasMarketData: boolean
   hasReadingModel: boolean
   isFullyConfigured: boolean
   hasUnsavedChanges: boolean
@@ -52,7 +52,7 @@ export interface SettingsCapabilitySummary {
 
 const MARKET_DATA_CAPABILITY = {
   id: 'market-data',
-  name: 'TickFlow',
+  name: 'Tushare',
   priority: 'primary',
   priorityLabelKey: 'settings.capabilityCategoryData',
   badgeLabelKeys: ['settings.marketCn', 'settings.marketUs', 'settings.marketHk'],
@@ -60,9 +60,8 @@ const MARKET_DATA_CAPABILITY = {
     'settings.capabilityDailyKline',
     'settings.capabilityFundamentals',
     'settings.capabilityExport',
-    'settings.capabilityCrossMarket',
   ],
-  noteKey: 'settings.tickflowCapabilityNote',
+  noteKey: 'settings.tushareCapabilityNote',
 } satisfies SettingsCapabilityDefinition
 
 export function buildSettingsCapabilityRows(input: SettingsCapabilityInput): SettingsCapabilityRow[] {
@@ -70,9 +69,9 @@ export function buildSettingsCapabilityRows(input: SettingsCapabilityInput): Set
   return [
     buildCredentialRow(
       MARKET_DATA_CAPABILITY,
-      hasCredential(input.tickflow),
-      hasCredential(input.savedTickflow),
-      normalize(input.tickflow) === normalize(input.savedTickflow),
+      hasCredential(input.tushare),
+      hasCredential(input.savedTushare),
+      normalize(input.tushare) === normalize(input.savedTushare),
     ),
     buildCredentialRow(
       {
@@ -105,7 +104,7 @@ export function summarizeSettingsCapabilities(rows: readonly SettingsCapabilityR
     unsavedCount,
     missingCount: totalCount - readyCount - unsavedCount,
     totalCount,
-    hasCrossMarketKline: rows.some((row) => row.id === 'market-data' && row.status === 'ready'),
+    hasMarketData: rows.some((row) => row.id === 'market-data' && row.status === 'ready'),
     hasReadingModel: rows.some((row) => row.id === 'reading-model' && row.status === 'ready'),
     isFullyConfigured: readyCount === totalCount,
     hasUnsavedChanges: unsavedCount > 0,

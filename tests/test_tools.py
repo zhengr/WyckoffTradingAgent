@@ -2615,47 +2615,6 @@ class TestDataFetcher:
         result = latest_trade_date_from_hist(df)
         assert result == date(2025, 1, 2)
 
-    def test_tickflow_batch_partial_keeps_available_frames(self, monkeypatch):
-        import tools.tickflow_batch_fetcher as batcher
-
-        class FakeTickFlowClient:
-            def __init__(self, api_key: str) -> None:
-                self.api_key = api_key
-
-            def get_klines_batch(self, *args, **kwargs):
-                return {
-                    "000001.SZ": pd.DataFrame(
-                        {
-                            "date": ["2025-01-01", "2025-01-02"],
-                            "open": [10.0, 10.1],
-                            "high": [10.5, 10.6],
-                            "low": [9.8, 9.9],
-                            "close": [10.2, 10.3],
-                            "volume": [1000, 1100],
-                        }
-                    )
-                }
-
-        window = SimpleNamespace(start_trade_date=date(2025, 1, 1), end_trade_date=date(2025, 1, 2))
-        monkeypatch.setenv("TICKFLOW_API_KEY", "dummy")
-        monkeypatch.setattr(batcher, "TICKFLOW_BATCH_ENABLED", True)
-        monkeypatch.setattr(batcher, "TickFlowClient", FakeTickFlowClient)
-
-        result = batcher.fetch_tickflow_daily_batch(
-            ["000001", "000002"],
-            window,
-            enforce_target_trade_date=False,
-            batch_size=200,
-            batch_sleep=0,
-        )
-
-        assert result is not None
-        df_map, stats = result
-        assert list(df_map) == ["000001"]
-        assert stats["fetch_ok"] == 1
-        assert stats["fetch_fail"] == 1
-        assert stats["failed_batches"] == 0
-
     def test_fetch_hist_direct_source_bypasses_cached_repository(self, monkeypatch):
         import integrations.data_source as data_source
         import integrations.fetch_a_share_csv as fetch_csv
@@ -2738,14 +2697,12 @@ class TestDataFetcher:
 
     def test_fetch_all_ohlcv_thread_fallback_counts_success_and_failure(self, monkeypatch):
         import tools.ohlcv_fallback_fetcher as fallback_fetcher
-        import tools.tickflow_batch_fetcher as batcher
 
         def fake_fetch(sym, *_args):
             if sym == "000001":
                 return sym, pd.DataFrame({"date": ["2026-05-13"], "close": [10.0]})
             return sym, None
 
-        monkeypatch.setattr(batcher, "fetch_tickflow_daily_batch", lambda **_kwargs: None)
         monkeypatch.setattr(fallback_fetcher, "fetch_one_with_retry_thread", fake_fetch)
         window = SimpleNamespace(start_trade_date=date(2026, 5, 12), end_trade_date=date(2026, 5, 13))
 

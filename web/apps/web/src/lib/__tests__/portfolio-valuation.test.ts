@@ -9,7 +9,7 @@ function createSupabase() {
       data: [{ code: '600519', shares: 10 }, { code: '06881.HK', shares: 1000 }],
       error: null,
     },
-    user_settings: { data: { tickflow_api_key: 'key' }, error: null },
+    user_settings: { data: {}, error: null },
   }
   return {
     updates,
@@ -33,18 +33,27 @@ function createSupabase() {
   }
 }
 
+function quoteText(entries: Array<[string, string, string]>) {
+  return entries.map(([sym, price, pct]) => {
+    const f = Array(34).fill('0')
+    f[1] = 'NAME'
+    f[2] = sym
+    f[3] = price
+    f[4] = '100'
+    f[6] = '1000'
+    f[30] = '20261118150000'
+    f[32] = pct
+    return `v_${sym}="${f.join('~')}"`
+  }).join('\n')
+}
+
 describe('refreshPortfolioTotalEquity', () => {
-  it('uses TickFlow last_price and converts HKD with the official CNY cross rate', async () => {
+  it('uses server quotes and converts HKD with the official CNY cross rate', async () => {
     const supabase = createSupabase()
     const fetcher = vi.fn(async (input: string | URL | Request) => {
       const url = String(input)
-      if (url.includes('/v1/quotes')) {
-        return Response.json({
-          data: [
-            { symbol: '600519.SH', last_price: 1500 },
-            { symbol: '06881.HK', last_price: 7.63 },
-          ],
-        })
+      if (url.includes('qt.gtimg.cn')) {
+        return new Response(quoteText([['sh600519', '1500', '0.67'], ['hk06881', '7.63', '1.2']]), { status: 200 })
       }
       return Response.json([{ base: 'CNY', quote: 'HKD', rate: 1.1627906977 }])
     })
@@ -52,7 +61,6 @@ describe('refreshPortfolioTotalEquity', () => {
     const result = await refreshPortfolioTotalEquity(
       { supabase: supabase.client as never, fetch: fetcher as never },
       'u1',
-      { quoteEndpoint: 'https://api.tickflow.org/v1/quotes' },
     )
 
     expect(result).toMatchObject({ ok: true, totalEquity: 46_561.8 })
@@ -62,7 +70,7 @@ describe('refreshPortfolioTotalEquity', () => {
   it('does not overwrite total_equity when any quote is missing', async () => {
     const supabase = createSupabase()
     const fetcher = vi.fn(async (input: string | URL | Request) => {
-      if (String(input).includes('/v1/quotes')) return Response.json({ data: [] })
+      if (String(input).includes('qt.gtimg.cn')) return new Response('', { status: 200 })
       return Response.json([])
     })
 

@@ -9,7 +9,6 @@
 from __future__ import annotations
 
 import json
-import os
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -19,7 +18,6 @@ from integrations.market_universe import load_hk_symbols, load_us_symbols
 from integrations.recommendation_global import resolve_global_table, upsert_global_recommendations
 from integrations.recommendation_tracking_common import chunked, fetch_records_from_table
 from integrations.supabase_base import create_admin_client, is_admin_configured, require_server_write_context
-from integrations.tickflow_client import TickFlowClient
 from workflows.market_funnel_asof import run_asof_market_funnel
 from workflows.market_funnel_data import (
     fetch_benchmark_history,
@@ -76,7 +74,9 @@ def _replay_dates(
     target_dates: tuple[date, ...],
 ) -> dict[int, list[dict[str, Any]]]:
     symbols, name_map = _LOADERS[market]()
-    client = TickFlowClient(api_key=_require_api_key())
+    from workflows.market_funnel_data import default_client
+
+    client = default_client()
     name_map = _augment_names(client, symbols, name_map, runtime)
     bench_df, bench_symbol = fetch_benchmark_history(client, runtime)
     print(f"[funnel-backfill] 取历史日K symbols={len(symbols)} count={runtime.kline_count}")
@@ -93,7 +93,7 @@ def _replay_dates(
 
 
 def _augment_names(
-    client: TickFlowClient,
+    client: Any,
     symbols: list[str],
     name_map: dict[str, str],
     runtime: RuntimeConfig,
@@ -197,13 +197,6 @@ def _counts_by_date(rows: list[dict[str, Any]]) -> dict[str, int]:
         key = str(_safe_int(row.get("recommend_date")))
         out[key] = out.get(key, 0) + 1
     return dict(sorted(out.items()))
-
-
-def _require_api_key() -> str:
-    api_key = os.getenv("TICKFLOW_API_KEY", "").strip()
-    if not api_key:
-        raise ValueError("TICKFLOW_API_KEY 未配置")
-    return api_key
 
 
 def _safe_int(value: Any) -> int:

@@ -3,6 +3,7 @@ import { klineRoutes } from './routes/kline'
 import { agentRunRoutes } from './routes/agent-runs'
 import { createApiApp } from './app'
 import { portfolioRoutes } from './routes/portfolio'
+import { quoteRoutes } from './routes/quote'
 import { remoteRoutes } from './routes/remote'
 import { settingsRoutes } from './routes/settings'
 import { shadowLedgerRoutes } from './routes/shadow-ledger'
@@ -22,6 +23,7 @@ app.route('/api/kline', klineRoutes)
 app.route('/api/agent', agentLaneRoutes)
 app.route('/api/agent-runs', agentRunRoutes)
 app.route('/api/portfolio', portfolioRoutes)
+app.route('/api/quote', quoteRoutes)
 app.route('/api/settings', settingsRoutes)
 app.route('/api/shadow-ledger', shadowLedgerRoutes)
 app.route('/api/remote', remoteRoutes)

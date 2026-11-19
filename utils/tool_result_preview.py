@@ -545,7 +545,6 @@ def _portfolio_preview(result: dict[str, Any]) -> str:
             "market_value_note": result.get("market_value_note"),
             "positions": _portfolio_position_preview(result.get("positions"), 8),
             "diagnostics": _portfolio_diagnostic_preview(result.get("diagnostics"), 8),
-            "tickflow_limit_hint": result.get("tickflow_limit_hint"),
         }
     )
     return serialize_tool_result(payload) if payload else ""

@@ -8,7 +8,6 @@ import {
   isSupportedPortfolioCode,
   normalizeCode,
   normalizePortfolioCode,
-  normalizeTickFlowSymbol,
   normalizeTushareCode,
   type ValueSnapshot,
 } from './agent-market'
@@ -43,6 +42,7 @@ import { WYCKOFF_CHART_PLAN_SCHEMA, validateChartPlan } from './wyckoff-chart-pl
 import { marketWatchSymbol, normalizeMarketWatchCode, readFreshMarketWatchSnapshot, type MarketWatchQuote, type MarketWatchSnapshot } from './market-watch'
 import { PLANET_MEMBERSHIP_URL } from './planet-membership'
 import { refreshPortfolioTotalEquity } from './portfolio-valuation'
+import { fetchServerIntraday, fetchServerKline, fetchServerQuotes, type ServerQuote } from './market-data'
 
 export interface KlineRow {
   date: string
@@ -67,7 +67,7 @@ export interface LLMToolConfig {
   base_url: string
 }
 
-export type KlineDataSource = 'tickflow' | 'tushare' | 'tencent' | 'sina' | 'mixed' | 'none'
+export type KlineDataSource = 'tushare' | 'tencent' | 'sina' | 'mixed' | 'none'
 
 export interface KlineDataQuality {
   source: KlineDataSource
@@ -111,7 +111,7 @@ export const ANALYZE_STOCK_OUTPUT_SCHEMA = z.object({
   data_source: z.string().nullable().optional(),
   data_asof: z.string().nullable().optional(),
   data_quality: z.object({
-    source: z.enum(['tickflow', 'tushare', 'tencent', 'sina', 'mixed', 'none']),
+    source: z.enum(['tushare', 'tencent', 'sina', 'mixed', 'none']),
     latestTradingDate: z.string().nullable(),
     coverageStart: z.string().nullable(),
     coverageEnd: z.string().nullable(),
@@ -189,28 +189,20 @@ export function buildKlineDigest(data: KlineRow[]): string {
   return lines.join('\n')
 }
 
-export async function fetchUserDataKeys(deps: ToolDeps, userId: string): Promise<{ tickflow: string | null; tushare: string | null }> {
+export async function fetchUserDataKeys(deps: ToolDeps, userId: string): Promise<{ tushare: string | null }> {
   const { data } = await deps.supabase
     .from('user_settings')
-    .select('tickflow_api_key, tushare_token')
+    .select('tushare_token')
     .eq('user_id', userId)
     .single()
   return {
-    tickflow: String(data?.tickflow_api_key || '').trim() || null,
     tushare: String(data?.tushare_token || '').trim() || null,
   }
 }
 
-export async function fetchTickFlowKey(deps: ToolDeps, userId: string): Promise<string | null> {
-  const keys = await fetchUserDataKeys(deps, userId)
-  return keys.tickflow
-}
-
-type RawMarketWatchQuote = Record<string, unknown>
-
 export async function fetchMarketWatchSnapshot(
   deps: ToolDeps,
-  userId: string,
+  _userId: string,
   codes: string[],
   cached: unknown = null,
 ): Promise<MarketWatchSnapshot> {
@@ -224,38 +216,18 @@ export async function fetchMarketWatchSnapshot(
   const cachedSnapshot = readFreshMarketWatchSnapshot(cached, requestedCodes)
   if (cachedSnapshot) return cachedSnapshot
 
-  const tickflowKey = await fetchTickFlowKey(deps, userId).catch(() => null)
-  if (!tickflowKey) {
-    return {
-      state: 'unavailable',
-      source: 'none',
-      requestedCodes,
-      quotes: [],
-      fetchedAt,
-      fromCache: false,
-      message: '未配置 TickFlow API Key',
-    }
-  }
-
   try {
-    const symbols = requestedCodes.map(marketWatchSymbol).join(',')
-    const response = await deps.fetch(`/api/llm-proxy/v1/quotes?symbols=${encodeURIComponent(symbols)}`, {
-      headers: { 'x-api-key': tickflowKey, 'X-Target-URL': 'https://api.tickflow.org' },
-    })
-    if (!response.ok) {
-      return buildUnavailableMarketWatch(requestedCodes, fetchedAt, `TickFlow 返回 HTTP ${response.status}`)
-    }
-    const rows = parseMarketWatchRows(await response.json())
+    const quotesMap = await fetchServerQuotes(requestedCodes, deps.fetch)
     const quotes = requestedCodes.map((requestedCode) => {
       const symbol = marketWatchSymbol(requestedCode)
-      const row = rows.find((candidate) => marketWatchRowMatches(candidate, symbol, requestedCode))
+      const row = quotesMap[symbol] || quotesMap[requestedCode] || quotesMap[requestedCode.split('.')[0] || '']
       return normalizeMarketWatchQuote(requestedCode, symbol, row, fetchedAt)
     })
     const available = quotes.filter((quote) => quote.price != null || quote.changePct != null)
-    if (available.length === 0) return buildUnavailableMarketWatch(requestedCodes, fetchedAt, 'TickFlow 没有返回观察篮的可用报价')
-    return { state: 'ready', source: 'tickflow', requestedCodes, quotes, fetchedAt, fromCache: false }
+    if (available.length === 0) return buildUnavailableMarketWatch(requestedCodes, fetchedAt, '服务端行情没有返回观察篮的可用报价')
+    return { state: 'ready', source: 'server', requestedCodes, quotes, fetchedAt, fromCache: false }
   } catch {
-    return buildUnavailableMarketWatch(requestedCodes, fetchedAt, 'TickFlow 行情请求失败')
+    return buildUnavailableMarketWatch(requestedCodes, fetchedAt, '服务端行情请求失败')
   }
 }
 
@@ -263,65 +235,24 @@ function buildUnavailableMarketWatch(requestedCodes: string[], fetchedAt: string
   return { state: 'unavailable', source: 'none', requestedCodes, quotes: [], fetchedAt, fromCache: false, message }
 }
 
-function parseMarketWatchRows(payload: unknown): RawMarketWatchQuote[] {
-  if (!payload || typeof payload !== 'object') return []
-  const root = payload as Record<string, unknown>
-  const data = root.data
-  if (Array.isArray(data)) return data.filter(isRecord)
-  if (data && typeof data === 'object') return Object.values(data).flatMap((value) => Array.isArray(value) ? value.filter(isRecord) : isRecord(value) ? [value] : [])
-  if (Array.isArray(root.records)) return root.records.filter(isRecord)
-  return []
-}
-
-function isRecord(value: unknown): value is RawMarketWatchQuote {
-  return Boolean(value && typeof value === 'object' && !Array.isArray(value))
-}
-
-function marketWatchRowMatches(row: RawMarketWatchQuote, symbol: string, requestedCode: string): boolean {
-  const rowSymbol = String(row.symbol || row.code || row.ts_code || '').trim().toUpperCase()
-  return rowSymbol === symbol || rowSymbol === requestedCode || rowSymbol.split('.')[0] === requestedCode.split('.')[0]
-}
-
 function normalizeMarketWatchQuote(
   requestedCode: string,
   symbol: string,
-  row: RawMarketWatchQuote | undefined,
+  row: ServerQuote | undefined,
   fallbackAsOf: string,
 ): MarketWatchQuote {
-  const price = numberFrom(row, ['last', 'price', 'current', 'close'])
-  const previousClose = numberFrom(row, ['pre_close', 'previous_close', 'prev_close'])
-  const directChange = numberFrom(row, ['pct_chg', 'change_pct', 'percent_change', 'changePercent'])
-  const changePct = directChange ?? (price != null && previousClose ? ((price - previousClose) / previousClose) * 100 : null)
+  const price = row?.price ?? null
+  const previousClose = row?.previousClose ?? null
+  const changePct = row?.changePct ?? (price != null && previousClose ? ((price - previousClose) / previousClose) * 100 : null)
   return {
     requestedCode,
     symbol,
     price,
     changePct,
     previousClose,
-    volume: numberFrom(row, ['volume', 'vol']),
-    asOf: normalizeMarketWatchTimestamp(row?.timestamp || row?.time || row?.datetime || row?.date, fallbackAsOf),
+    volume: row?.volume ?? null,
+    asOf: row?.asOf ?? fallbackAsOf,
   }
-}
-
-function normalizeMarketWatchTimestamp(value: unknown, fallback: string): string {
-  if (value == null || value === '') return fallback
-  const numeric = Number(value)
-  if (Number.isFinite(numeric) && numeric > 0) {
-    const milliseconds = numeric < 10_000_000_000 ? numeric * 1000 : numeric
-    const date = new Date(milliseconds)
-    if (!Number.isNaN(date.getTime())) return date.toISOString()
-  }
-  const date = new Date(String(value))
-  return Number.isNaN(date.getTime()) ? String(value) : date.toISOString()
-}
-
-function numberFrom(row: RawMarketWatchQuote | undefined, keys: string[]): number | null {
-  if (!row) return null
-  for (const key of keys) {
-    const value = Number(row[key])
-    if (Number.isFinite(value)) return value
-  }
-  return null
 }
 
 async function tusharePost(deps: ToolDeps, token: string, api_name: string, params: Record<string, string>, fields: string) {
@@ -368,90 +299,10 @@ async function fetchKlineViaTushare(deps: ToolDeps, code: string, token: string,
   }).filter((d): d is KlineRow => d !== null && d.date !== '' && d.close > 0)
 }
 
-function parseKlineRows(rows: unknown[]): KlineRow[] {
-  return (rows as Record<string, unknown>[]).map(r => ({
-    date: String(r.date || r.trade_date || '').replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3'),
-    open: Number(r.open || 0),
-    high: Number(r.high || 0),
-    low: Number(r.low || 0),
-    close: Number(r.close || 0),
-    volume: Number(r.volume || r.vol || 0),
-  })).filter(d => d.date && d.close > 0)
-}
-
-function parseTickFlowTable(table: Record<string, unknown[]>): KlineRow[] {
-  const ts = Array.isArray(table.timestamp) ? table.timestamp : []
-  if (ts.length === 0) return []
-  const o = table.open || [], h = table.high || [], l = table.low || [], c = table.close || [], v = table.volume || []
-  return ts.map((t, i) => ({
-    date: formatTimestamp(t), open: Number(o[i] || 0), high: Number(h[i] || 0),
-    low: Number(l[i] || 0), close: Number(c[i] || 0), volume: Number(v[i] || 0),
-  })).filter(d => d.date && d.close > 0)
-}
-
-function findTickFlowTable(data: unknown, symbol: string): Record<string, unknown[]> | null {
-  if (!data || typeof data !== 'object' || Array.isArray(data)) return null
-  const obj = data as Record<string, unknown>
-  if (Array.isArray(obj.timestamp)) return obj as Record<string, unknown[]>
-  const direct = obj[symbol]
-  if (direct && typeof direct === 'object' && !Array.isArray(direct)) {
-    const table = direct as Record<string, unknown>
-    if (Array.isArray(table.timestamp)) return table as Record<string, unknown[]>
-  }
-  for (const value of Object.values(obj)) {
-    if (value && typeof value === 'object' && !Array.isArray(value)) {
-      const table = value as Record<string, unknown>
-      if (Array.isArray(table.timestamp)) return table as Record<string, unknown[]>
-    }
-  }
-  return null
-}
-
-function parseTickFlowPayload(json: Record<string, unknown>, symbol: string): KlineRow[] {
-  const data = json.data
-  if (Array.isArray(data)) return parseKlineRows(data)
-  if (Array.isArray(json.records)) return parseKlineRows(json.records)
-  const table = findTickFlowTable(data, symbol)
-  return table ? parseTickFlowTable(table) : []
-}
-
-function formatTimestamp(value: unknown): string {
-  // TickFlow columnar klines use epoch seconds; treating them as ms collapses every bar to 1970.
-  const raw = String(value || '').trim()
-  if (/^\d{8}$/.test(raw)) return raw.replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3')
-  const n = Number(raw)
-  if (Number.isFinite(n) && n > 0) {
-    const milliseconds = n < 1_000_000_000_000 ? n * 1000 : n
-    return new Date(milliseconds + 8 * 3600_000).toISOString().slice(0, 10)
-  }
-  return raw.replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3').slice(0, 10)
-}
-
-async function fetchKlineViaTickFlow(deps: ToolDeps, code: string, apiKey: string, count = 250): Promise<KlineRow[]> {
-  const symbol = normalizeTickFlowSymbol(code)
-  const params = new URLSearchParams({
-    symbol, period: '1d', count: String(count), adjust: 'forward',
-  })
-  const resp = await deps.fetch(`/api/llm-proxy/v1/klines?${params}`, {
-    headers: { 'x-api-key': apiKey, 'X-Target-URL': 'https://api.tickflow.org' },
-  })
-  if (resp.ok) {
-    const rows = parseTickFlowPayload(await resp.json(), symbol)
-    if (rows.length) return rows
-  }
-  const batchParams = new URLSearchParams({ symbols: symbol, period: '1d', count: String(count), adjust: 'forward' })
-  const batchResp = await deps.fetch(`/api/llm-proxy/v1/klines/batch?${batchParams}`, {
-    headers: { 'x-api-key': apiKey, 'X-Target-URL': 'https://api.tickflow.org' },
-  })
-  if (!batchResp.ok) return []
-  return parseTickFlowPayload(await batchResp.json(), symbol)
-}
-
-
 export async function fetchKlineForAgentWithQuality(
   deps: ToolDeps,
   code: string,
-  keys: { tickflow: string | null; tushare: string | null },
+  keys: { tushare: string | null },
   _userId: string,
 ): Promise<{ rows: KlineRow[]; quality: KlineDataQuality }> {
   const end = new Date(); end.setDate(end.getDate() - 1)
@@ -459,17 +310,17 @@ export async function fetchKlineForAgentWithQuality(
   const fmt = (d: Date) => d.toISOString().slice(0, 10).replace(/-/g, '')
   const isCn = isCnSymbol(code)
 
-  if (keys.tickflow) {
-    try {
-      const r = await fetchKlineViaTickFlow(deps, code, keys.tickflow)
-      if (r.length) return { rows: r, quality: buildKlineDataQuality('tickflow', 320, r) }
-    } catch { /* */ }
-  }
   if (isCn && keys.tushare) {
     try {
       const r = (await fetchKlineViaTushare(deps, code, keys.tushare, fmt(start), fmt(end))).sort((a, b) => a.date.localeCompare(b.date))
-      if (r.length) return { rows: r, quality: buildKlineDataQuality('tushare', 320, r, Boolean(keys.tickflow)) }
-    } catch { /* */ }
+      if (r.length) return { rows: r, quality: buildKlineDataQuality('tushare', 320, r) }
+    } catch { /* fall through to server */ }
+  }
+  const serverHit = await fetchServerKline(code, fmt(start), fmt(end), 'qfq', deps.fetch).catch(() => null)
+  if (serverHit && serverHit.data.length) {
+    const rows = serverHit.data
+    const src: KlineDataSource = serverHit.source === 'sina' ? 'sina' : 'tencent'
+    return { rows, quality: buildKlineDataQuality(src, 320, rows, Boolean(keys.tushare)) }
   }
   return { rows: [], quality: buildKlineDataQuality('none', 320, []) }
 }
@@ -477,13 +328,13 @@ export async function fetchKlineForAgentWithQuality(
 export async function fetchKlineForAgent(
   deps: ToolDeps,
   code: string,
-  keys: { tickflow: string | null; tushare: string | null },
+  keys: { tushare: string | null },
   userId: string,
 ): Promise<KlineRow[]> {
   return (await fetchKlineForAgentWithQuality(deps, code, keys, userId)).rows
 }
 
-export async function fetchValueSnapshotForAgent(deps: ToolDeps, code: string, keys: { tickflow: string | null; tushare: string | null }): Promise<ValueSnapshot> {
+export async function fetchValueSnapshotForAgent(deps: ToolDeps, code: string, keys: { tushare: string | null }): Promise<ValueSnapshot> {
   return fetchValueSnapshotWithFetch(deps.fetch, code, keys)
 }
 
@@ -505,32 +356,13 @@ export function buildValueAgentDigest(snapshot: ValueSnapshot): string {
 
 export async function fetchQuotes(
   deps: ToolDeps,
-  tickflowKey: string | null,
+  _keys: { tushare: string | null },
   stocks: { code: string | number }[],
-): Promise<Record<string, Record<string, number>>> {
-  if (!tickflowKey || stocks.length === 0) return {}
+): Promise<Record<string, ServerQuote>> {
+  if (stocks.length === 0) return {}
   try {
-    const symbols = stocks.map((r) => {
-      const portfolioCode = normalizePortfolioCode(r.code) || normalizeCode(r.code)
-      return normalizeTickFlowSymbol(portfolioCode)
-    }).join(',')
-    const resp = await deps.fetch(
-      `/api/llm-proxy/v1/quotes?symbols=${symbols}`,
-      { headers: { 'x-api-key': tickflowKey, 'X-Target-URL': 'https://api.tickflow.org' } },
-    )
-    if (!resp.ok) return {}
-    const json = await resp.json() as { data?: Record<string, number>[] }
-    const result: Record<string, Record<string, number>> = {}
-    for (const row of (json.data || [])) {
-      const sym = String((row as Record<string, unknown>).symbol || '').toUpperCase()
-      if (!sym) continue
-      result[sym] = row
-      const base = sym.split('.')[0] || ''
-      if (base) result[base] = row
-      const portfolioCode = normalizePortfolioCode(sym)
-      if (portfolioCode) result[portfolioCode] = row
-    }
-    return result
+    const codes = stocks.map((r) => normalizePortfolioCode(r.code) || normalizeCode(r.code)).filter(Boolean)
+    return await fetchServerQuotes(codes, deps.fetch)
   } catch { return {} }
 }
 
@@ -602,15 +434,14 @@ export async function execSearchStock(deps: ToolDeps, userId: string, query: str
     return true
   }).slice(0, 10)
 
-  const tickflowKey = await fetchTickFlowKey(deps, userId)
-  const quotes = await fetchQuotes(deps, tickflowKey, unique)
+  const quotes = await fetchQuotes(deps, await fetchUserDataKeys(deps, userId), unique)
 
   const lines = unique.map((r) => {
     const code = normalizePortfolioCode(r.code) || normalizeCode(r.code)
-    const qt = quotes[code] || quotes[normalizeTickFlowSymbol(code)]
+    const qt = quotes[code] || quotes[normalizePortfolioCode(code) || code]
     if (qt) {
-      const price = qt.last_price || qt.close || qt.last || qt.price || qt.current || 0
-      const pct = qt.pct_chg ?? ((qt.close && qt.pre_close) ? ((qt.close - qt.pre_close) / qt.pre_close * 100) : null)
+      const price = qt.price ?? 0
+      const pct = qt.changePct
       const pctStr = pct != null ? `${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%` : ''
       const currency = code.endsWith('.HK') ? 'HK$' : code.endsWith('.US') ? '$' : '¥'
       return `${code} ${r.name} | ${currency}${Number(price).toFixed(2)} ${pctStr}`
@@ -712,18 +543,20 @@ const MARKET_INDEXES: Record<MarketIndexKey, { code: string; name: string }> = {
 
 export async function execMarketHistory(
   deps: ToolDeps,
-  userId: string,
+  _userId: string,
   model: unknown,
   days = 100,
   index: MarketIndexKey = 'sse',
 ): Promise<string> {
-  const key = await fetchTickFlowKey(deps, userId)
-  if (!key) return '无法回看大盘历史K线：请先在设置页配置 TickFlow API Key。'
   const requestedDays = Math.min(Math.max(Math.trunc(days) || 100, 1), 250)
   const fetchDays = Math.max(requestedDays, 20)
   const target = MARKET_INDEXES[index] || MARKET_INDEXES.sse
-  const rows = await fetchKlineViaTickFlow(deps, target.code, key, fetchDays)
-  if (rows.length === 0) return `无法获取 ${target.name} 过去 ${requestedDays} 个交易日K线。请检查 TickFlow 数据权限或稍后重试。`
+  const end = new Date(); end.setDate(end.getDate() - 1)
+  const start = new Date(); start.setDate(start.getDate() - Math.ceil(fetchDays * 1.6))
+  const fmt = (d: Date) => d.toISOString().slice(0, 10).replace(/-/g, '')
+  const hit = await fetchServerKline(target.code, fmt(start), fmt(end), 'qfq', deps.fetch).catch(() => null)
+  const rows = hit?.data ?? []
+  if (rows.length === 0) return `无法获取 ${target.name} 过去 ${requestedDays} 个交易日K线。请稍后重试。`
   const digest = buildMarketHistoryDigest(target.name, rows.slice(-requestedDays))
   const result = await deps.generateText({
     model: model as Parameters<typeof GenerateTextFn>[0]['model'],
@@ -749,7 +582,7 @@ function buildMarketHistoryDigest(name: string, rows: KlineRow[]): string {
   ].join(','))
   return [
     `指数：${name}`,
-    '数据来源：TickFlow 日线K线',
+    '数据来源：服务端日线行情（腾讯/新浪）',
     `样本：最近${rows.length}个交易日，${first.date} 至 ${last.date}`,
     `区间涨跌：${ret >= 0 ? '+' : ''}${ret.toFixed(2)}%，区间高点 ${high.toFixed(2)}，低点 ${low.toFixed(2)}，当前区间位置 ${closePos.toFixed(1)}%`,
     `近5日均量 ${vol5.toFixed(0)}，近20日均量 ${vol20.toFixed(0)}，量比(5/20) ${(vol5 / (vol20 || 1)).toFixed(2)}`,
@@ -1491,41 +1324,35 @@ function booleanValue(value: unknown): boolean | null {
 }
 
 /** 取不复权实时最新价,只用于核对复权口径。取不到就返回 null,不猜。 */
-async function fetchLivePrice(deps: ToolDeps, code: string, tickflowKey: string | null): Promise<number | null> {
-  if (!tickflowKey) return null
-  const quotes = await fetchQuotes(deps, tickflowKey, [{ code }])
-    .catch((): Record<string, Record<string, number>> => ({}))
+async function fetchLivePrice(deps: ToolDeps, code: string, keys: { tushare: string | null }): Promise<number | null> {
+  const quotes = await fetchQuotes(deps, keys, [{ code }])
   const normalized = normalizePortfolioCode(code) || normalizeCode(code)
-  const row = quotes[normalized] || quotes[normalizeTickFlowSymbol(normalized)]
-  if (!row) return null
-  const price = row.last_price || row.close || row.last || row.price || row.current || 0
-  return Number.isFinite(price) && price > 0 ? price : null
+  const row = quotes[normalized] || quotes[normalized.split('.')[0] || '']
+  return row?.price ?? null
 }
 
 export async function execAnalyzeStock(
   deps: ToolDeps, userId: string, _config: LLMToolConfig, model: unknown, code: string, name: string | null,
 ): Promise<AnalyzeStockResult> {
   const keys = await fetchUserDataKeys(deps, userId)
-  if (!isCnSymbol(code) && !keys.tickflow) {
-    return buildAnalyzeError(code, name, `无法获取 ${code} ${name || ''} 的K线数据。美股/港股诊断需要先在设置页配置 TickFlow API Key，并使用标准代码（如 AAPL.US / 00700.HK）。`)
-  }
+
   const [klineResult, valueSnapshot] = await Promise.all([
     fetchKlineForAgentWithQuality(deps, code, keys, userId),
     fetchValueSnapshotForAgent(deps, code, keys).catch((): ValueSnapshot => ({ symbol: code, source: 'none', metrics: null, reason: 'not-found' })),
   ])
   const { rows: kline, quality } = klineResult
   if (kline.length === 0) {
-    return buildAnalyzeError(code, name, `无法获取 ${code} ${name || ''} 的K线数据。美股/港股请使用 TickFlow 标准代码（如 AAPL.US / 00700.HK）。推荐购买 TickFlow 获取实时行情：https://tickflow.org/auth/register?ref=5N4NKTCPL4`)
+    return buildAnalyzeError(code, name, `无法获取 ${code} ${name || ''} 的K线数据。请检查股票代码，或使用服务端行情支持的代码格式（A股6位 / 00700.HK / AAPL.US）后重试。`)
   }
 
   // 结构价位来自前复权，报单价必须是不复权实时价。两把尺子悄悄错开会把
   // 除权前的价位当成挂单价报出去，所以先核一遍。
   const basisNote = formatPriceBasisNote(checkPriceBasis(
     kline[kline.length - 1]?.close ?? null,
-    await fetchLivePrice(deps, code, keys.tickflow),
+    await fetchLivePrice(deps, code, keys),
   ))
   const digest = [
-    `数据来源：${quality.source === 'tickflow' ? 'TickFlow' : quality.source === 'tushare' ? 'Tushare' : quality.source}`,
+    `数据来源：${SOURCE_LABEL[quality.source] || quality.source}`,
     `数据覆盖：${quality.coverageStart || '未知'} 至 ${quality.coverageEnd || '未知'}；最新交易日：${quality.latestTradingDate || '未知'}；返回 ${quality.returnedRows}/${quality.requestedRows} 根${quality.fallbackUsed ? '；已发生数据源回退' : ''}`,
     buildKlineDigest(kline),
     basisNote,
@@ -1652,7 +1479,7 @@ export async function execGenerateAiReport(
       fetchValueSnapshotForAgent(deps, code, keys).catch((): ValueSnapshot => ({ symbol: code, source: 'none', metrics: null, reason: 'not-found' })),
     ])
     if (kline.length === 0) {
-      results.push(`## ${code}\n无法获取K线数据。美股/港股请使用 TickFlow 标准代码（如 AAPL.US / 00700.HK）。\n`)
+      results.push(`## ${code}\n无法获取K线数据。请检查股票代码后重试。\n`)
       continue
     }
     const digest = buildKlineDigest(kline)
@@ -1764,21 +1591,11 @@ function formatStrategyPolicyDigest(policy: ScreenStrategyPolicy | null): string
   return lines.join('\n')
 }
 
-export async function execIntradayAnalysis(deps: ToolDeps, userId: string, code: string): Promise<string> {
-  const apiKey = await fetchTickFlowKey(deps, userId)
-  if (!apiKey) return '未配置 TickFlow API Key，无法获取分钟线数据。请在设置中配置。'
-  const symbol = normalizeTickFlowSymbol(code)
+export async function execIntradayAnalysis(deps: ToolDeps, _userId: string, code: string): Promise<string> {
   const periods = ['1m', '5m', '15m'] as const
-  const results = await Promise.all(periods.map(async (period) => {
-    const params = new URLSearchParams({ symbol, period, count: period === '1m' ? '500' : '100' })
-    const resp = await deps.fetch(`/api/llm-proxy/v1/klines/intraday?${params}`, {
-      headers: { 'x-api-key': apiKey, 'X-Target-URL': 'https://api.tickflow.org' },
-    })
-    if (!resp.ok) return []
-    return parseTickFlowPayload(await resp.json(), symbol)
-  }))
+  const results = await Promise.all(periods.map((period) => fetchServerIntraday(code, period, deps.fetch).catch(() => [] as KlineRow[])))
   const [rows1m, rows5m, rows15m] = results
-  if (!rows1m || rows1m.length < 10) return `${code} 无法获取分钟线数据，可能非交易时段或代码有误。`
+  if (!rows1m || rows1m.length < 10) return `${code} 无法获取分钟线数据。服务端分钟线暂不可用或非交易时段，请改用 analyze_stock 基于日线分析。`
   const profile = computeIntradayProfile(rows1m, rows5m || [], rows15m || [])
   const lines = [
     `📊 ${code} 盘中简评（${rows1m.length}根1m线，仅供参考，权威评分以后端策略为准）`,
@@ -1790,6 +1607,10 @@ export async function execIntradayAnalysis(deps: ToolDeps, userId: string, code:
     `参考强度: ${profile.strengthScore.toFixed(0)}/100（简化算法，不含量价深度分析）`,
   ]
   return lines.join('\n')
+}
+
+const SOURCE_LABEL: Record<KlineDataSource, string> = {
+  tushare: 'Tushare', tencent: '腾讯', sina: '新浪', mixed: '多源', none: '无来源',
 }
 
 interface IntradayProfileWeb {

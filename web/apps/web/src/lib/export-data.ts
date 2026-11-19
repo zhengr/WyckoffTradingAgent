@@ -1,4 +1,3 @@
-import { formatTimestampDate } from './format'
 
 export type ExportCell = string | number
 export type ExportRow = Record<string, ExportCell>
@@ -26,7 +25,7 @@ export function normalizeExportSymbol(raw: string): string {
   return `${input}.SH`
 }
 
-/** Resolve a typed/selected search hit into TickFlow export symbol (supports Chinese names via caller-provided stock). */
+/** Resolve a typed/selected search hit into an export symbol (supports Chinese names via caller-provided stock). */
 export function exportSymbolFromStock(stock: { symbol?: string; analysisCode?: string } | null | undefined): string {
   if (!stock) return ''
   return normalizeExportSymbol(stock.symbol || stock.analysisCode || '')
@@ -52,25 +51,30 @@ export function buildKlineParams(symbol: string, days: number, endOffset: number
   endDate.setDate(endDate.getDate() - endOffset)
   const startDate = new Date(endDate)
   startDate.setDate(endDate.getDate() - Math.ceil(days * 1.6))
+  const code = symbol.replace(/\.(SH|SZ|BJ)$/i, '')
   return new URLSearchParams({
-    symbol,
-    period: '1d',
-    count: String(days),
-    adjust: adjust === 'qfq' ? 'forward' : adjust === 'hfq' ? 'backward' : 'none',
-    start_time: String(toMs(formatCompactDate(startDate))),
-    end_time: String(toMs(formatCompactDate(endDate))),
+    code,
+    start: formatCompactDate(startDate),
+    end: formatCompactDate(endDate),
+    adjust: adjust === 'hfq' ? 'hfq' : adjust === 'qfq' ? 'qfq' : 'none',
   })
 }
 
-export function parseTickFlowToRows(json: Record<string, unknown>): ExportRow[] {
+/** Map /api/kline rows (date/open/high/low/close/volume) into export rows. */
+export function parseKlineToRows(json: Record<string, unknown>): ExportRow[] {
   const data = json.data
-  if (Array.isArray(data)) return normalizeRowArray(data)
-  if (Array.isArray(json.records)) return normalizeRowArray(json.records)
-  const table = findTickFlowTable(data)
-  if (!table) return []
-  const timestamps = Array.isArray(table.timestamp) ? table.timestamp : []
-  const keys = Object.keys(table).filter((key) => Array.isArray(table[key]) && key !== 'timestamp')
-  return timestamps.map((ts, index) => tableRowToExportRow(ts, keys, table, index))
+  if (!Array.isArray(data)) return []
+  return data
+    .filter((row): row is Record<string, unknown> => Boolean(row) && typeof row === 'object' && !Array.isArray(row))
+    .map((row) => ({
+      date: String(row.date || '').replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3'),
+      open: Number(row.open || 0),
+      high: Number(row.high || 0),
+      low: Number(row.low || 0),
+      close: Number(row.close || 0),
+      volume: Number(row.volume || 0),
+    }))
+    .filter((row) => row.date && row.close > 0)
 }
 
 export function buildEnhancedRows(rows: ExportRow[]): ExportRow[] {
@@ -129,37 +133,9 @@ export function downloadBlob(blob: Blob, fileName: string): void {
   URL.revokeObjectURL(url)
 }
 
-function normalizeRowArray(rows: unknown[]): ExportRow[] {
-  return rows
-    .filter((row): row is Record<string, unknown> => Boolean(row) && typeof row === 'object' && !Array.isArray(row))
-    .map((row) => Object.fromEntries(Object.entries(row).map(([key, value]) => [key, normalizeCell(key, value)])))
-}
 
-function findTickFlowTable(data: unknown): Record<string, unknown[]> | null {
-  if (!data || typeof data !== 'object' || Array.isArray(data)) return null
-  const obj = data as Record<string, unknown>
-  if (Array.isArray(obj.timestamp)) return obj as Record<string, unknown[]>
-  for (const value of Object.values(obj)) {
-    if (value && typeof value === 'object' && !Array.isArray(value)) {
-      const table = value as Record<string, unknown>
-      if (Array.isArray(table.timestamp)) return table as Record<string, unknown[]>
-    }
-  }
-  return null
-}
 
-function tableRowToExportRow(ts: unknown, keys: string[], table: Record<string, unknown[]>, index: number): ExportRow {
-  const row: ExportRow = { date: formatTimestampDate(ts) }
-  for (const key of keys) row[key] = normalizeCell(key, table[key]?.[index])
-  return row
-}
 
-function normalizeCell(key: string, value: unknown): ExportCell {
-  if (key === 'date' || key === 'trade_date') return String(value || '').replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3')
-  if (key === 'timestamp') return formatTimestampDate(value)
-  const numeric = Number(value)
-  return Number.isFinite(numeric) && value !== '' ? numeric : String(value ?? '')
-}
 
 function numberValue(row: ExportRow, aliases: string[]): number | '' {
   const value = pickValue(row, aliases)
@@ -188,9 +164,6 @@ function formatCompactDate(d: Date): string {
   return d.toISOString().slice(0, 10).replace(/-/g, '')
 }
 
-function toMs(date: string): number {
-  return new Date(date.replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3')).getTime()
-}
 
 function buildCrcTable(): Uint32Array {
   const table = new Uint32Array(256)

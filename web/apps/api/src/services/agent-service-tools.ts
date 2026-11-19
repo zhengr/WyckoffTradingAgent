@@ -6,7 +6,7 @@ import { agentServiceConfig, isListedUser, type AgentServiceConfig } from './age
 // 读盘室的循环留在 Worker 里，会员额外获得由 Python 服务提供的工具。
 // 这里只放读盘室里**没有**的能力：同名或功能重复的工具不要加，会员已经有它们和专用的展示。
 
-type CredentialKey = 'tushare_token' | 'tickflow_api_key'
+type CredentialKey = 'tushare_token'
 
 type RemoteToolSpec = {
   name: string
@@ -38,9 +38,9 @@ export const REMOTE_TOOLS: RemoteToolSpec[] = [
     name: 'intraday_rescue_check',
     description:
       '60 分钟结构救援评估：平台突破、VWAP 收复、趋势确立，用于判断被套持仓盘中是否出现自救结构。' +
-      '需要用户在设置页配置 TickFlow Key，非交易时段可能取不到数据。',
+      '非交易时段可能取不到分钟数据，可改用日线诊断。',
     inputSchema: z.object({ code: CODE_SCHEMA }),
-    credentials: ['tickflow_api_key'],
+    credentials: [],
   },
 ]
 

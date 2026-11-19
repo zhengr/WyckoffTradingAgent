@@ -16,17 +16,6 @@ def code_to_name(code: str) -> str:
     return _NAME_MAP.get(code, code)
 
 
-def collect_tickflow_limit_hints_from_df(df: Any) -> list[str]:
-    if df is None or not hasattr(df, "attrs"):
-        return []
-    attrs = getattr(df, "attrs", {}) or {}
-    hints = attrs.get("tickflow_limit_hints")
-    if isinstance(hints, list):
-        return _dedupe_texts(hints)
-    one = str(attrs.get("tickflow_limit_hint", "") or "").strip()
-    return [one] if one else []
-
-
 def hist_metadata(df: Any) -> dict[str, Any]:
     if df is None or not hasattr(df, "attrs"):
         return {}
@@ -70,15 +59,6 @@ def _load_etf_name_map() -> dict[str, str]:
     except Exception:
         logger.debug("failed to load ETF name map", exc_info=True)
         return {}
-
-
-def _dedupe_texts(items: list[Any]) -> list[str]:
-    out: list[str] = []
-    for item in items:
-        text = str(item or "").strip()
-        if text and text not in out:
-            out.append(text)
-    return out
 
 
 def _copy_upstream_sources(attrs: dict[str, Any], meta: dict[str, Any]) -> None:

@@ -39,11 +39,12 @@
    ┌─────────────┐
    │ Data Sources│
    │             │
-   │ tickflow ★  │
-   │ tushare     │
+   │ tushare ★   │
    │ akshare     │
    │ baostock    │
    │ efinance    │
+   │ tencent     │
+   │ sina        │
    └─────────────┘
 ```
 
@@ -62,7 +63,7 @@
   │
   ├─→ /api/llm-proxy/*         ← 兼容代理，用于行情/LLM 直连能力
   │       │
-  │       └─→ X-Target-URL 头指定目标 → TickFlow / Tushare / DeepSeek / OpenAI / 1Route / ...
+  │       └─→ X-Target-URL 头指定目标 → Tushare / DeepSeek / OpenAI / 1Route / ...
   │
   └─→ 静态资源 (CF Pages CDN)
 ```
@@ -111,7 +112,7 @@ Worker 负责鉴权、输入校验、队列控制面和 HMAC 签名。Vercel Nod
 
 读盘室的循环仍在 Worker 里（工具、专用展示、审批流程都不变），会员额外获得由 `cli/service` 的 `POST /v1/tools/<name>` 提供的工具，所以**能力只会比原来多，不会少**。三道闸门同时满足才注册：服务已配置、用户在 `AGENT_TOOLS_USERS` 里、且是有效星球会员。
 
-- 目前三个，都是读盘室里没有的能力：`market_regime`（A 股市况判定与动态阈值）、`wyckoff_diagnose`（单股确定性结构诊断）、`intraday_rescue_check`（60 分钟救援评估，需要用户的 TickFlow Key）。
+- 目前三个，都是读盘室里没有的能力：`market_regime`（A 股市况判定与动态阈值）、`wyckoff_diagnose`（单股确定性结构诊断）、`intraday_rescue_check`（60 分钟救援评估，需要用户配置行情数据源 Key，如 Tushare Token）。
 - 只放「读盘室里没有」的能力。同名或重复的工具（`analyze_stock`、`screen_stocks` 等）不加：会员已经有它们和专用展示。
 - 凭据由网关按工具声明的键从会员自己的 `user_settings` 取出，随请求发给服务，服务不持有任何用户密钥，也不碰 Supabase。
 - 服务只执行 `WYCKOFF_SERVICE_TOOLS` 白名单里的工具，其余一律 404；共用模式启动时还会拒绝命令、任意文件读写、浏览器、本机数据库类工具。
@@ -132,7 +133,7 @@ Worker 负责鉴权、输入校验、队列控制面和 HMAC 签名。Vercel Nod
 
 `X-RateLimit-Backend` 明确返回 `redis`、`local` 或 `local-fallback`，便于区分共享额度、未配置 Redis 和 Redis 故障降级。Redis 只承载可过期的协调状态与短期 Agent Run 结果，不承载持仓、订单、交易信号或审计真相；这些数据仍由 Supabase/RLS 管理。
 
-读盘室只在用户问题命中观察篮代码，或明确要求复盘观察篮时，从 TickFlow 拉取相关标的的最新可用行情。快照只在浏览器保存 45 秒，随请求传入 Worker 并校验代码集合、时间和数值类型；它不写入 Supabase 或 Redis，数据源不可用时模型必须明确说明缺失，不得估算价格。行情块以当轮额外 user 消息注入模型上下文，**不拼进 system prompt**，避免价/时间戳变动打爆 prompt cache。
+读盘室只在用户问题命中观察篮代码，或明确要求复盘观察篮时，从行情数据源拉取相关标的的最新可用行情（优先 Tushare，降级 AkShare / 腾讯 / 新浪）。快照只在浏览器保存 45 秒，随请求传入 Worker 并校验代码集合、时间和数值类型；它不写入 Supabase 或 Redis，数据源不可用时模型必须明确说明缺失，不得估算价格。行情块以当轮额外 user 消息注入模型上下文，**不拼进 system prompt**，避免价/时间戳变动打爆 prompt cache。
 
 前端的 `web/apps/web/src/lib/api-url.ts` 统一生成 chat、portfolio、settings、agent-runs 和 remote 的后端地址。本地开发默认连接 `http://127.0.0.1:8787`；生产默认返回同源相对路径 `/api/...`，由 Pages Function 反代到 `wyckoff-api` Worker。调试可用公开构建变量 `VITE_API_URL` 覆盖（例如仍指向 `workers.dev`）；该变量只包含公开服务地址，不能放 Token。生产浏览器不再依赖对 `workers.dev` 的 CORS。桌面 `remote_pair` 编进二维码的是 Pages 上的 `/m/#code=…`（默认 `WYCKOFF_WEB_BASE=https://wyckoff-analysis.pages.dev`），不是 Worker 根路径——Worker 对 `/m` 只返回 JSON 404；配对 / 设备 / host WS 仍走 `WYCKOFF_API_BASE`。
 
@@ -155,7 +156,7 @@ Worker 负责鉴权、输入校验、队列控制面和 HMAC 签名。Vercel Nod
 
 服务端断点调试在 `web/apps/api/` 执行 `pnpm dev:debug`，再从 VS Code 选择 `Wyckoff API: Attach Wrangler`；Inspector 固定使用 9229，TypeScript source map 直接定位到 `src/**/*.ts`。API 的 `pnpm test` 通过 `@cloudflare/vitest-pool-workers` 在本地 `workerd` 中执行，测试配置使用隔离绑定而不读取 `.dev.vars`。真实 Upstash 用例只在显式导出 `UPSTASH_REDIS_REST_URL`、`UPSTASH_REDIS_REST_TOKEN` 后执行 `pnpm test:upstash`，它会验证共享限流及 Agent Run 的 Redis CAS 状态转换；真实 Vercel 用例从 `web/apps/api/` 执行 `pnpm test:sandbox`，它在 Node bridge 中运行 SDK，需要本地 Vercel Token、Team ID 与 Project ID。默认测试不发起真实网络请求，也不会创建沙箱。
 
-`/api/llm-proxy/*` 继续保留为兼容代理：一部分 Web 工具和本地开发路径仍需要同域转发 TickFlow / Tushare / OpenAI-compatible 请求，避免浏览器 CORS 和供应商 SSE 差异。
+`/api/llm-proxy/*` 继续保留为兼容代理：一部分 Web 工具和本地开发路径仍需要同域转发 Tushare / OpenAI-compatible 请求，避免浏览器 CORS 和供应商 SSE 差异。
 
 代理只接受受信 Web Origin（无 `Origin` 的 CLI 请求继续兼容）、`GET/POST`、2 MiB 以内请求，并限制到 HTTPS 白名单上游；服务端模型 `base_url` 同样拒绝凭据、非标准端口、loopback、私网和 link-local 地址，且不跟随重定向。
 
@@ -230,7 +231,7 @@ Streamlit 框架在 MVP 阶段支撑了产品验证，但主分支已全面下�
 
 **MCP 三层权限**：
 - Tier 1（无需凭证）：历史查询（`query_history`）— 形态复盘、信号池和策略归因只读摘要
-- Tier 2（需 TUSHARE_TOKEN / TICKFLOW_API_KEY 等 env）：搜索、分析（`analyze_stock`）、大盘、扫描、回测、盘中结构和漏斗仿真
+- Tier 2（需 TUSHARE_TOKEN 等行情数据源 env）：搜索、分析（`analyze_stock`）、大盘、扫描、回测、盘中结构和漏斗仿真
 - Tier 3（需 Supabase 用户认证或本地降级）：持仓管理（`portfolio` / `update_portfolio`）、AI 研报、攻防决策
 
 ### ReAct 循环（Reasoning + Acting）
@@ -959,14 +960,14 @@ MCP server 走 ToolSurface，没有确认弹窗也没有待批队列。`tools/wr
 ## 数据源
 
 ```
-tickflow(★) → tushare → akshare → baostock → efinance   （A 股日线 OHLCV，五级降级）
-tickflow                                        （港股 / 美股日线、实时行情、分钟 K 线）
+tushare(★) → akshare → baostock → efinance → tencent → sina   （A 股日线 OHLCV，多级降级）
+统一行情仓库层按可用源降级                        （港股 / 美股日线、实时行情、分钟 K 线，不再绑定单一厂商）
 tushare → akshare + 本地 24h 缓存              （A 股股票列表，代码⇄名字映射）
 data/market_universes/*.json                    （A 股 / 港股 / 美股 / ETF universe 与名称检索）
-tickflow                                        （1 分钟盘中数据，供个股盘中分析使用）
+统一行情仓库层                                  （盘中分时数据，供个股盘中分析使用）
 ```
 
-日线行情通过统一仓库层 `integrations/stock_hist_repository.py` 直接从数据源拉取（TickFlow 优先，降级 tushare/akshare/baostock）。
+日线行情通过统一仓库层 `integrations/stock_hist_repository.py` 直接从数据源拉取（Tushare 优先，依次降级 akshare/baostock/efinance/tencent/sina）。
 
 `integrations/rag_veto.py` — 新闻否决层：读取 AkShare/东方财富个股新闻，按 URL 或标准化标题去重后做相关性、关键词和语义检查；来源失败时 fail-open，不阻断 Step3。
 
@@ -1285,7 +1286,7 @@ order by n;
 
 持仓账本 `portfolio_positions` 由人工维护：OMS 只产出建议单，任何代码路径都不会因为发过 EXIT
 就自动减少股数。这意味着**成交必须回填，否则系统状态会停在成交前**——止损会对着早该卖掉的仓位
-每天重发一次，`daily_nav` 也会长期偏离真实账户。`code` 支持 A 股 6 位、港股 `NNNNN.HK`、美股 `TICKER.US`（TickFlow 标准码）；CLI/Web 写入前会规范化大小写与港股补零。
+每天重发一次，`daily_nav` 也会长期偏离真实账户。`code` 支持 A 股 6 位、港股 `NNNNN.HK`、美股 `TICKER.US`（市场后缀代码）；CLI/Web 写入前会规范化大小写与港股补零。
 
 - `core/trade_fill.py` 是纯计算：按成交增量摊薄成本价（含佣金）、扣双边费用、卖光时清仓、
   给出已实现盈亏。成本价按标的本币计；`free_cash` 按人民币计，港美回填必须乘
@@ -1298,7 +1299,7 @@ order by n;
 - 入口：CLI `wyckoff portfolio fill`、MCP/Agent 工具 `record_trade_fill`。
   `portfolio add` 只插入新仓且必须带合法建仓日，不要拿它记成交。
 - 任一持仓新增、覆盖、删除、现金修改或完整成交回填成功后，写入边界都会重新读取整个组合，
-  用 TickFlow 最新可用报价按市值计价，并把港股/美股按 ECB 最新参考汇率折算成人民币，随后同步更新
+  用最新可用行情报价按市值计价，并把港股/美股按 ECB 最新参考汇率折算成人民币，随后同步更新
   `portfolios.total_equity` 与 `updated_at`。Python/CLI、Web `/api/portfolio` 整表保存和 Web Agent
   `execute_portfolio_update` 使用同一口径；批量修改与成交回填只在全部字段写完后刷新一次。
 - 估值必须覆盖全部非零持仓；任一行情或汇率缺失时，持仓修改仍视为成功，但旧 `total_equity` 不会被
@@ -1324,7 +1325,7 @@ order by n;
 - 拖延天数按可卖日计算：一字跌停（全天最高价未离开跌停价）当日卖不掉，不计入天数，但也不打断
   连续段，否则中间夹一个跌停板就能把前面的拖延洗掉。仅收在跌停不算——盘中高于跌停价即存在卖出窗口。
 
-星球会员身份以 `public.planet_members` 为唯一事实表：`user_id text` 为主键，`created_at timestamptz` 记录绑定时间，`expires_on date` 按 `Asia/Shanghai` 判断最后有效日，`NULL` 表示长期有效。会员身份与个人模型/行情配置相互独立，单股分析不会因会员身份绕过 TickFlow/Tushare Key 检查。客户端只有按 `auth.uid()` 读取自己记录的 RLS 权限，没有会员写权限。旧表采用一次性 breaking cutover，发布与回滚顺序见 [PLANET_MEMBERSHIP.md](PLANET_MEMBERSHIP.md)。
+星球会员身份以 `public.planet_members` 为唯一事实表：`user_id text` 为主键，`created_at timestamptz` 记录绑定时间，`expires_on date` 按 `Asia/Shanghai` 判断最后有效日，`NULL` 表示长期有效。会员身份与个人模型/行情配置相互独立，单股分析不会因会员身份绕过行情数据源 Key 检查。客户端只有按 `auth.uid()` 读取自己记录的 RLS 权限，没有会员写权限。旧表采用一次性 breaking cutover，发布与回滚顺序见 [PLANET_MEMBERSHIP.md](PLANET_MEMBERSHIP.md)。
 
 Web `/shadow` 只读 `USER_SHADOW:*` 纸面账，且与其它业务页一样走 AuthGuard：未登录只进 `/login`。
 登录后 `GET /api/shadow-ledger` 用服务端角色查 `shadow_*`，按 `planet_members` 裁剪 payload。
@@ -1377,7 +1378,6 @@ wyckoff model default <id>       # 设置默认模型
 wyckoff model refresh            # 刷新 OpenRouter 模型目录（真实上下文窗口）
 wyckoff config                   # 查看数据源配置
 wyckoff config tushare <token>   # 配置 Tushare
-wyckoff config tickflow <key>    # 配置 TickFlow
 wyckoff portfolio list           # 查看持仓（别名 pf）
 wyckoff portfolio add <code>     # 添加持仓
 wyckoff portfolio rm <code>      # 删除持仓

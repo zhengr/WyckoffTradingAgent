@@ -30,7 +30,6 @@ class BenchmarkFetchConfig:
     batch_size: int = 200
     batch_timeout: int = 420
     batch_sleep: float = 0.55
-    disable_tickflow_batch: bool = False
     enforce_target_date: bool = False
     output: Path | None = None
 
@@ -45,8 +44,7 @@ def run_benchmark_funnel_fetch(config: BenchmarkFetchConfig, log_fn: LogFn = pri
     window = resolve_trading_window(resolve_end_calendar_day(), max(config.trading_days, 30))
     log_fn(
         f"[bench] runner={config.runner}, mode={config.mode}, workers={config.workers}, "
-        f"symbols={len(symbols)}, window={window.start_trade_date}->{window.end_trade_date}, "
-        f"disable_tickflow_batch={config.disable_tickflow_batch}"
+        f"symbols={len(symbols)}, window={window.start_trade_date}->{window.end_trade_date}"
     )
     summaries = _run_requested_paths(symbols, window, config, log_fn)
     if config.output:
@@ -146,11 +144,8 @@ def _run_single(symbols: list[str], window, config: BenchmarkFetchConfig) -> tup
 
 def _run_batch(symbols: list[str], window, config: BenchmarkFetchConfig) -> tuple[list[dict[str, Any]], float, dict]:
     import tools.data_fetcher as dfetcher
-    import tools.tickflow_batch_fetcher as tickflow_batch_fetcher
     from workflows.fetch_runtime_config import fetch_runtime_config_from_env
 
-    if config.disable_tickflow_batch:
-        tickflow_batch_fetcher.TICKFLOW_BATCH_ENABLED = False
     started = time.monotonic()
     df_map, stats = dfetcher.fetch_all_ohlcv(
         symbols=symbols,

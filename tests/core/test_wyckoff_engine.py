@@ -191,7 +191,7 @@ def test_sector_groups_stably_deduplicate_concepts_per_symbol() -> None:
     assert counts == {"机器人": 1, "人工智能": 1}
 
     def test_amount_all_zero_falls_back_to_close_times_volume(self):
-        """TickFlow 港股/美股历史 K 线 amount 字段恒为 0，L1 流动性过滤必须回退为 close*volume，
+        """港股/美股历史 K 线 amount 字段缺失，L1 流动性过滤必须回退为 close*volume，
         否则所有标的都会被误判为流动性不足而全部剔除（真实生产回归 bug）。
 
         require_cn_main_or_chinext=False 跳过板块限制，聚焦测试 _amount_liquidity_ok
@@ -200,7 +200,7 @@ def test_sector_groups_stably_deduplicate_concepts_per_symbol() -> None:
         cfg = FunnelConfig(min_avg_amount_wan=800.0, require_cn_main_or_chinext=False)
         dates = pd.date_range("2024-01-01", periods=100, freq="B")
         closes = [10.0] * 100
-        # amount 全 0 模拟 TickFlow 港股数据源限制；volume 足够大，close*volume 应能通过门槛
+        # amount 全 0 模拟港股数据源限制；volume 足够大，close*volume 应能通过门槛
         df = _make_df(
             dates.strftime("%Y-%m-%d").tolist(),
             closes,

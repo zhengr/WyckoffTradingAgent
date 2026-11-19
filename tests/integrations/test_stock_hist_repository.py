@@ -32,7 +32,7 @@ def test_get_stock_hist_returns_data_from_source(monkeypatch):
             },
         ]
     )
-    fake_df.attrs["source"] = "tickflow"
+    fake_df.attrs["source"] = "akshare"
 
     monkeypatch.setattr(repo, "fetch_stock_hist_from_source", lambda **kwargs: fake_df)
 
@@ -41,7 +41,7 @@ def test_get_stock_hist_returns_data_from_source(monkeypatch):
     assert len(out) == 2
     assert out.iloc[-1]["日期"] == "2026-04-30"
     assert out.attrs["source"] == "realtime"
-    assert out.attrs["upstream_source"] == "tickflow"
+    assert out.attrs["upstream_source"] == "akshare"
 
 
 def test_get_stock_hist_rejects_unknown_kwargs() -> None:

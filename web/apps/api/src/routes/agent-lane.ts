@@ -31,13 +31,11 @@ export type AgentLaneDeps = {
 // 数据类凭据：和 agent-service-tools.ts 的 loadCredentials 读同一张表、同样取 trim 后的非空值，
 // 两条车道各自维护一份是因为取用方式不同（这里是整轮都带上，那边是按工具声明按需取）。
 async function loadServiceCredentials(supabase: Supabase, userId: string): Promise<ServiceCredentials> {
-  const { data } = await supabase.from('user_settings').select('tickflow_api_key, tushare_token').eq('user_id', userId).single()
+  const { data } = await supabase.from('user_settings').select('tushare_token').eq('user_id', userId).single()
   const row = (data || {}) as Record<string, unknown>
   const credentials: ServiceCredentials = {}
   const tushareToken = String(row.tushare_token || '').trim()
-  const tickflowKey = String(row.tickflow_api_key || '').trim()
   if (tushareToken) credentials.tushare_token = tushareToken
-  if (tickflowKey) credentials.tickflow_api_key = tickflowKey
   return credentials
 }
 

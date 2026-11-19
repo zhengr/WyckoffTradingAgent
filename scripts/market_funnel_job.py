@@ -13,7 +13,7 @@ logging.basicConfig(level=logging.INFO, format="[%(asctime)s] %(levelname)s %(na
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Run TickFlow HK/US Wyckoff funnel job.")
+    parser = argparse.ArgumentParser(description="Run HK/US Wyckoff funnel job.")
     parser.add_argument("--market", choices=MARKET_CHOICES, required=True)
     parser.add_argument("--output", default="", help="Optional JSON result path.")
     return parser.parse_args()

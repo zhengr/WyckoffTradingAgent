@@ -11,7 +11,6 @@ import requests
 import utils.feishu_backtest_card
 import utils.feishu_report_card
 import utils.feishu_text
-from integrations.tickflow_notice import append_tickflow_limit_hint
 
 
 def _post_card(webhook_url: str, title: str, chunk: str) -> tuple[bool, str]:
@@ -116,7 +115,7 @@ def send_feishu_notification(webhook_url: str, title: str, content: str) -> bool
     if not webhook_url or not webhook_url.strip():
         return False
 
-    annotated = utils.feishu_text.annotate_financial_terms(append_tickflow_limit_hint(content))
+    annotated = utils.feishu_text.annotate_financial_terms(content)
     normalized = utils.feishu_text.normalize_lark_md(annotated)
     chunks = utils.feishu_text.split_lark_md(normalized, max_len=int(os.getenv("FEISHU_LARK_MAX_LEN", "2800")))
     try:

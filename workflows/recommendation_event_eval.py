@@ -27,7 +27,12 @@ from integrations.recommendation_performance import (
     latest_market_records,
     resolve_tracking_market,
 )
-from integrations.recommendation_tracking_common import chunked, ohlc_map_from_tickflow_hist, recommend_date_to_yyyymmdd
+from integrations.recommendation_tracking_common import (
+    chunked,
+    fetch_tracking_market_data,
+    ohlc_map_from_hist,
+    recommend_date_to_yyyymmdd,
+)
 from integrations.supabase_base import create_admin_client, is_admin_configured
 from utils.json_text import parse_json_object as _json_map
 from workflows.step4_text import clean_text as _clean_text
@@ -102,15 +107,11 @@ def run_recommendation_event_eval(request: RecommendationEventEvalRequest) -> in
 def build_recommendation_event_eval(request: RecommendationEventEvalRequest) -> dict[str, Any]:
     if not is_admin_configured():
         raise ValueError("SUPABASE_URL/SUPABASE_SERVICE_ROLE_KEY 未配置")
-    api_key = os.getenv("TICKFLOW_API_KEY", "").strip()
-    if not api_key:
-        raise ValueError("TICKFLOW_API_KEY 未配置")
-
     market = resolve_tracking_market(request.market)
     records = _fetch_records(market, request.max_dates)
     observation_index = _fetch_observation_feature_index(market, records)
     grouped = group_records_by_market_code(records, market)
-    hist_by_code = _fetch_hist_by_code(api_key, sorted(grouped), market, request.kline_count)
+    hist_by_code = _fetch_hist_by_code(sorted(grouped), market, request.kline_count)
     events = _build_events(grouped, hist_by_code, request, observation_index)
     events_by_date = _events_by_date(events)
     ranked_by_strategy = _ranked_events_by_strategy(events_by_date)
@@ -215,32 +216,14 @@ def _merge_observation_features(
 
 
 def _fetch_hist_by_code(
-    api_key: str,
     codes: list[str],
     market: str,
     kline_count: int,
 ) -> dict[str, pd.DataFrame | None]:
-    symbol_map = _tickflow_symbol_map(codes, market)
-    hist_map = _fetch_histories(api_key, sorted(set(symbol_map.values())), kline_count)
-    return {code: hist_map.get(symbol) for code, symbol in symbol_map.items()}
-
-
-def _tickflow_symbol_map(codes: list[str], market: str) -> dict[str, str]:
-    if market != "cn":
-        return {code: code for code in codes if code}
-    from integrations.tickflow_client import normalize_cn_symbol
-
-    return {code: symbol for code in codes if (symbol := normalize_cn_symbol(code))}
-
-
-def _fetch_histories(api_key: str, symbols: list[str], kline_count: int) -> dict[str, pd.DataFrame]:
-    from integrations.tickflow_client import TickFlowClient
-
-    client = TickFlowClient(api_key=api_key)
-    hist_map: dict[str, pd.DataFrame] = {}
-    for batch in chunked(symbols, _batch_size()):
-        hist_map.update(client.get_klines_batch(batch, period="1d", count=max(int(kline_count), 1), adjust="forward"))
-    return hist_map
+    """Per-symbol daily bars for every tracked code (CN via fallback chain, HK/US via provider)."""
+    symbols = sorted(code for code in codes if code)
+    _quotes, hist_map = fetch_tracking_market_data("", symbols, _batch_size())
+    return {code: hist_map.get(code) for code in codes}
 
 
 def _build_events(
@@ -252,7 +235,7 @@ def _build_events(
     events: list[dict[str, Any]] = []
     observation_index = observation_index or _ObservationFeatureIndex({}, frozenset(), "not_requested")
     for code, rows in sorted(grouped.items()):
-        ohlc = ohlc_map_from_tickflow_hist(hist_by_code.get(code), preserve_invalid=True)
+        ohlc = ohlc_map_from_hist(hist_by_code.get(code), preserve_invalid=True)
         events.extend(_event_with_quality(row, code, ohlc, request, observation_index) for row in rows)
     return sorted(events, key=lambda item: (item.get("recommend_date") or 0, str(item.get("code") or "")))
 

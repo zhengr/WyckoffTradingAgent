@@ -23,7 +23,6 @@ jobs:
       issues: write
     env:
       PYTHONUNBUFFERED: "1"
-      TICKFLOW_API_KEY: ${{ secrets.TICKFLOW_API_KEY }}
       TZ: Asia/Shanghai
       SHADOW_ISSUE: "594"
     steps:

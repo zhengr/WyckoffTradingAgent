@@ -132,7 +132,7 @@ def ensure_intraday_df(df: pd.DataFrame) -> pd.DataFrame:
 def infer_session_vwap(close: pd.Series, total_volume: float, total_amount: float) -> tuple[float, float]:
     """全天成交额加权均价（VWAP）。
 
-    TickFlow 分钟线自带的 amount 已是真实成交额（元），与 volume 同源、单位自洽，
+    分钟线数据源自带的 amount 已是真实成交额（元），与 volume 同源、单位自洽，
     直接相除即为真实 VWAP，无需猜测 volume 的股/手换算比例。
     仅当 amount 缺失/异常（相对价格中位数偏离过大，说明取数或单位有问题）时，
     才退化为用收盘价中位数近似，此时该值只应作为粗粒度参考，不用于精细阈值判断。

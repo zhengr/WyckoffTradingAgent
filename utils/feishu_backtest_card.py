@@ -4,8 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from integrations.tickflow_notice import TICKFLOW_LIMIT_HINT, has_recent_tickflow_limit_event
-from utils.feishu_text import lark_md_div, lark_note
+from utils.feishu_text import lark_md_div
 
 
 @dataclass(frozen=True)
@@ -213,8 +212,5 @@ def build_backtest_card_elements(content: str) -> tuple[list[dict], str]:
         + _track_elements(data.track_data)
         + _regime_elements(data.regime_data)
     )
-    if has_recent_tickflow_limit_event():
-        elements.append({"tag": "hr"})
-        elements.append(lark_note(f"⚠️ {TICKFLOW_LIMIT_HINT}"))
     template = "blue" if (data.sharpe or 0) > 0 else "orange"
     return elements, template

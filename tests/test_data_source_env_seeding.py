@@ -14,29 +14,25 @@ def _use_config(monkeypatch, tmp_path: Path, payload: dict) -> None:
 
 
 def test_seed_fills_missing_env_and_keeps_explicit_values(monkeypatch, tmp_path: Path) -> None:
-    _use_config(monkeypatch, tmp_path, {"tushare_token": " from-config ", "tickflow_api_key": "tk-config"})
+    _use_config(monkeypatch, tmp_path, {"tushare_token": " from-config "})
     monkeypatch.delenv("TUSHARE_TOKEN", raising=False)
-    monkeypatch.setenv("TICKFLOW_API_KEY", "tk-explicit")
 
     local_auth.seed_data_source_env()
 
     import os
 
     assert os.environ["TUSHARE_TOKEN"] == "from-config"
-    assert os.environ["TICKFLOW_API_KEY"] == "tk-explicit"
 
 
 def test_seed_ignores_blank_config_values(monkeypatch, tmp_path: Path) -> None:
-    _use_config(monkeypatch, tmp_path, {"tushare_token": "  ", "tickflow_api_key": None})
+    _use_config(monkeypatch, tmp_path, {"tushare_token": "  "})
     monkeypatch.delenv("TUSHARE_TOKEN", raising=False)
-    monkeypatch.delenv("TICKFLOW_API_KEY", raising=False)
 
     local_auth.seed_data_source_env()
 
     import os
 
     assert "TUSHARE_TOKEN" not in os.environ
-    assert "TICKFLOW_API_KEY" not in os.environ
 
 
 def test_public_mcp_backend_seeds_local_data_source_credentials(monkeypatch, tmp_path: Path) -> None:

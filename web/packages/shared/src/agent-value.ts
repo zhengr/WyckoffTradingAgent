@@ -161,7 +161,6 @@ export function valueTraceMeta(snapshot: ValueSnapshot): ValueTraceMeta {
 }
 
 export function sourceLabel(snapshot: ValueSnapshot): string {
-  if (snapshot.source === 'tickflow') return 'TickFlow'
   if (snapshot.source === 'tushare') return 'Tushare'
   return '--'
 }

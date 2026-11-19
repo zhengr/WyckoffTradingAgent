@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import logging
 from bisect import bisect_right
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -12,6 +13,8 @@ import pandas as pd
 from core.recommendation_payload import event_change_pct
 from integrations.supabase_base import require_shared_writes_enabled
 from utils.safe import safe_float
+
+logger = logging.getLogger(__name__)
 
 
 def chunked(items: list[Any], size: int) -> list[list[Any]]:
@@ -45,13 +48,16 @@ def pick_close_on_or_before(sorted_trade_dates: list[str], target_yyyymmdd: str)
     return "" if index < 0 else sorted_trade_dates[index]
 
 
-def resolve_tickflow_quote_price(quote: dict[str, Any] | None) -> float:
+def resolve_quote_price(quote: dict[str, Any] | None) -> float:
     row = quote or {}
     for key in ("last_price", "close", "last", "price", "current"):
         value = safe_float(row.get(key), 0.0)
         if value > 0:
             return value
     return 0.0
+
+
+# Legacy call sites still import the old name; the implementation is source-neutral now.
 
 
 def quote_trade_date_yyyymmdd(quote: dict[str, Any] | None) -> str:
@@ -65,7 +71,7 @@ def quote_trade_date_yyyymmdd(quote: dict[str, Any] | None) -> str:
         return ""
 
 
-def close_map_from_tickflow_hist(hist: pd.DataFrame | None) -> dict[str, float]:
+def close_map_from_hist(hist: pd.DataFrame | None) -> dict[str, float]:
     if hist is None or hist.empty or not {"date", "close"}.issubset(hist.columns):
         return {}
     work = hist[["date", "close"]].copy()
@@ -76,9 +82,7 @@ def close_map_from_tickflow_hist(hist: pd.DataFrame | None) -> dict[str, float]:
     return {str(day): float(price) for day, price in zip(work["trade_date"], work["close"])}
 
 
-def ohlc_map_from_tickflow_hist(
-    hist: pd.DataFrame | None, *, preserve_invalid: bool = False
-) -> dict[str, dict[str, float]]:
+def ohlc_map_from_hist(hist: pd.DataFrame | None, *, preserve_invalid: bool = False) -> dict[str, dict[str, float]]:
     if hist is None or hist.empty or not {"date", "high", "low", "close"}.issubset(hist.columns):
         return {}
     columns = [col for col in ("open", "high", "low", "close", "volume") if col in hist.columns]
@@ -160,20 +164,63 @@ def empty_tracking_refresh_summary() -> dict[str, Any]:
     }
 
 
-def fetch_tickflow_tracking_market_data(
+def fetch_tracking_market_data(
     api_key: str,
     symbols: list[str],
     batch_size: int,
 ) -> tuple[dict[str, dict[str, Any]], dict[str, pd.DataFrame]]:
-    from integrations.tickflow_client import TickFlowClient
+    """Quotes from the A-share spot snapshot / HK-US provider, daily bars one symbol at a time.
 
-    client = TickFlowClient(api_key=api_key)
+    ``api_key`` is kept in the signature for legacy callers and is intentionally ignored:
+    none of the replacement sources requires a private key.
+    """
+    from core.candidate_metadata import code6
+    from integrations import spot_snapshot
+    from integrations.data_source import fetch_stock_hist
+    from integrations.data_source_hk_us import fetch_quote_map, is_hk_us_symbol
+
     quotes: dict[str, dict[str, Any]] = {}
     hist_map: dict[str, pd.DataFrame] = {}
-    for chunk in chunked(symbols, batch_size):
-        quotes.update(client.get_quotes(chunk))
-        hist_map.update(client.get_klines_batch(chunk, period="1d", count=120, adjust="none"))
+    spot_map: dict[str, dict[str, Any]] = {}
+    hk_us_symbols: list[str] = []
+    for symbol in symbols:
+        text = str(symbol or "").strip()
+        if not text:
+            continue
+        if is_hk_us_symbol(text):
+            hk_us_symbols.append(text)
+        elif code6(text):
+            if not spot_map:
+                spot_map = spot_snapshot.load_spot_snapshot_map()
+            row = spot_map.get(code6(text))
+            if row:
+                quotes[text] = dict(row)
+
+    if hk_us_symbols:
+        quotes.update(fetch_quote_map(hk_us_symbols))
+
+    end = date.today()
+    start = end - timedelta(days=220)
+    for symbol in symbols:
+        text = str(symbol or "").strip()
+        if not text:
+            continue
+        try:
+            if is_hk_us_symbol(text):
+                from integrations.data_source_hk_us import fetch_stock_hk_us
+
+                frame = fetch_stock_hk_us(text, start.strftime("%Y%m%d"), end.strftime("%Y%m%d"), "")
+            else:
+                frame = fetch_stock_hist(text, start.strftime("%Y%m%d"), end.strftime("%Y%m%d"), "")
+        except Exception as exc:
+            logger.warning("tracking hist failed: %s: %s", text, type(exc).__name__)
+            continue
+        if frame is not None and not frame.empty:
+            hist_map[text] = frame
     return quotes, hist_map
+
+
+# Legacy name retained as an alias while call sites migrate.
 
 
 def tracking_update_from_close_map(

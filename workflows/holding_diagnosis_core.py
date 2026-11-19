@@ -1,7 +1,7 @@
 """Daily-bar holding diagnosis: portfolio loading, diagnosis, and action mapping.
 
 Replaces the former minute-bar tail-buy holding pipeline. Uses `core.holding_diagnostic`
-(daily K-line based; no TickFlow intraday dependency) as the single source of truth for
+(daily K-line based) as the single source of truth for
 health/exit signals, and maps it onto a simple ADD/TRIM/HOLD action for reporting.
 """
 
@@ -256,12 +256,12 @@ def _action_from_diagnostic(
 
 def fetch_holding_daily_frame(code: str) -> pd.DataFrame | None:
     from core.portfolio_symbol import is_cn_portfolio_code, normalize_portfolio_code
-    from integrations.tickflow_client import normalize_cn_symbol
+    from integrations.data_source_format import normalize_cn_exchange_code
 
     normalized = normalize_portfolio_code(code)
     if not normalized:
         return None
-    symbol = normalize_cn_symbol(normalized) if is_cn_portfolio_code(normalized) else normalized
+    symbol = normalize_cn_exchange_code(normalized) if is_cn_portfolio_code(normalized) else normalized
     window = resolve_trading_window(end_calendar_day=resolve_end_calendar_day(), trading_days=TRADING_DAYS)
     try:
         raw = fetch_hist(symbol, window, adjust="qfq")

@@ -440,7 +440,6 @@ def _cmd_config(args):
 
     CONFIG_KEYS = {
         "tushare": ("tushare_token", "Tushare Token", "TUSHARE_TOKEN", "secret"),
-        "tickflow": ("tickflow_api_key", "TickFlow API Key", "TICKFLOW_API_KEY", "secret"),
         "stream_timeout": ("stream_chunk_timeout_seconds", "模型空闲/首token超时(秒)", "", "timeout"),
         "tool_timeout": ("tool_timeout_seconds", "工具执行超时(秒)", "", "timeout"),
     }
@@ -465,7 +464,7 @@ def _cmd_config(args):
             status = f"\033[32m{_mask(val)}\033[0m" if val else "\033[90m未配置\033[0m"
             print(f"  {label}: {status}")
         print()
-        print("用法: wyckoff config tushare|tickflow|stream_timeout|tool_timeout <value>")
+        print("用法: wyckoff config tushare|stream_timeout|tool_timeout <value>")
         return
 
     if sub not in CONFIG_KEYS:
@@ -1957,7 +1956,7 @@ def _add_auth_model_config_parsers(sub) -> None:
         "config_cmd",
         nargs="?",
         default="",
-        help="tushare/tickflow/stream_timeout/tool_timeout",
+        help="tushare/stream_timeout/tool_timeout",
     )
     p_config.add_argument("value", nargs="?", default="", help="值（可省略，交互输入）")
 

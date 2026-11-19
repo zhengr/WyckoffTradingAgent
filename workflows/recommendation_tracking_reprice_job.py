@@ -10,7 +10,7 @@ from zoneinfo import ZoneInfo
 from integrations.recommendation_performance import refresh_tracking_performance
 from workflows.recommendation_tracking_reprice import (
     refresh_global_tracking_prices,
-    refresh_tracking_prices_with_tickflow_realtime,
+    refresh_tracking_prices_realtime,
 )
 
 TZ = ZoneInfo("Asia/Shanghai")
@@ -37,9 +37,7 @@ def run_recommendation_reprice_job(request: RecommendationRepriceRequest) -> int
 
 
 def _run_market_reprice(market: str, logs_path: str | None) -> dict:
-    summary = (
-        refresh_global_tracking_prices(market) if market != "cn" else refresh_tracking_prices_with_tickflow_realtime()
-    )
+    summary = refresh_global_tracking_prices(market) if market != "cn" else refresh_tracking_prices_realtime()
     _refresh_tracking_performance(market, logs_path)
     return summary
 

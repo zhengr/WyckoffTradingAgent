@@ -67,7 +67,7 @@ pnpm --filter @wyckoff/api test
    trigger weight 相隔 40 分钟、靠 `actions/cache` 跨流程接面板,实跑直接失败在「缺少
    `trigger_panel.csv`」(记在 `.github/workflows/trigger_weight_eval.yml` 头部)。所以
    **B 要用 A 的产物,就把两者放进同一个 workflow 用 `needs`**,别靠错开 cron。
-   周六那批 eval 之间错开 cron 只为分摊 Tushare / TickFlow 取数配额,不为排序;写注释时别
+   周六那批 eval 之间错开 cron 只为分摊数据源（Tushare 等）取数配额,不为排序;写注释时别
    写成「紧随 X 之后」,那是一句给不出的保证。这条无法机械检查:跨流程读产物与读上游生产
    漏斗的 `daily-job-artifacts-*`(90 天历史窗口、取不到就整节跳过)在 YAML 里长得一样,
    差别只在读的是同一批次的产物还是历史窗口。

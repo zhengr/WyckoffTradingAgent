@@ -46,7 +46,6 @@ def test_run_market_funnel_notifies_both_markets(monkeypatch: pytest.MonkeyPatch
     """
     sent: list[dict] = []
     monkeypatch.setenv("FEISHU_WEBHOOK_URL", "https://example.invalid/hook")
-    monkeypatch.setattr(mfj, "_require_tickflow_client", lambda: object())
     monkeypatch.setattr(mfj, "load_market_symbols", lambda _p: ["AAPL.US"])
     monkeypatch.setattr(
         mfj,

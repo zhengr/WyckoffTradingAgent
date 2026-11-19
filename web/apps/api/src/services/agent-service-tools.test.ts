@@ -10,7 +10,7 @@ const ENV = {
 function deps(overrides: Partial<AgentToolsDeps> = {}): AgentToolsDeps {
   return {
     isMember: async () => true,
-    loadCredentials: async () => ({ tickflow_api_key: 'tf-key', tushare_token: 'ts-token' }),
+    loadCredentials: async () => ({ tushare_token: 'ts-token' }),
     fetchImpl: vi.fn(async () => Response.json({ result: { ok: true } })) as unknown as typeof fetch,
     ...overrides,
   }
@@ -88,12 +88,12 @@ describe('calling a remote tool', () => {
     await run(tools, 'wyckoff_diagnose', { code: '600519' })
 
     const bodies = fetchImpl.mock.calls.map((call) => JSON.parse(String((call as unknown as [string, RequestInit])[1].body)))
-    expect(bodies[0]).toEqual({ args: { code: '600519' }, credentials: { tickflow_api_key: 'tf-key' } })
+    expect(bodies[0]).toEqual({ args: { code: '600519' }, credentials: {} })
     expect(bodies[1]).toEqual({ args: { code: '600519' }, credentials: {} })
   })
 
   it('does not load the user settings for a tool that needs no credentials', async () => {
-    const loadCredentials = vi.fn(async () => ({ tickflow_api_key: 'tf-key' }))
+    const loadCredentials = vi.fn(async () => ({ tushare_token: 'tu-key' }))
     const tools = await buildAgentServiceTools(ENV, 'user-1', deps({ loadCredentials }))
 
     await run(tools, 'market_regime', {})
@@ -106,7 +106,7 @@ describe('calling a remote tool', () => {
     const tools = await buildAgentServiceTools(
       ENV,
       'user-1',
-      deps({ loadCredentials: async () => ({ tickflow_api_key: '' }), fetchImpl: fetchImpl as unknown as typeof fetch }),
+      deps({ loadCredentials: async () => ({ tushare_token: '' }), fetchImpl: fetchImpl as unknown as typeof fetch }),
     )
 
     await run(tools, 'intraday_rescue_check', { code: '600519' })

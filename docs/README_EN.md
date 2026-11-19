@@ -39,17 +39,6 @@ Project homepage: **[youngcan-wang.github.io/wyckoff-homepage](https://youngcan-
 ## Special Thanks
 
 <table>
-  <tr>
-    <td width="150" align="center">
-      <a href="https://tickflow.org/auth/register?ref=5N4NKTCPL4">
-        <img src="../attach/tickflow-logo.png" alt="TickFlow" width="120" />
-      </a>
-    </td>
-    <td>
-      <strong><a href="https://tickflow.org/auth/register?ref=5N4NKTCPL4">TickFlow</a></strong><br />
-      Thanks to TickFlow for high-quality A-share / US stock / Hong Kong stock market data support for WyckoffAgent.
-    </td>
-  </tr>
 </table>
 
 ## Online Usage
@@ -103,13 +92,12 @@ The Electron desktop workspace brings Agent chat, portfolio, schedules, tracking
 Daily bar auto-fallback chain:
 
 ```
-tickflow → tushare → akshare → baostock → efinance
+tushare → akshare → baostock → efinance → tencent → sina
 ```
 
 When any source is unavailable the system silently falls back to the next — zero intervention required.
 
-> **Recommended: connect TickFlow for stronger A-share / US stock / Hong Kong stock real-time and intraday capabilities**
-> Register: [TickFlow Registration](https://tickflow.org/auth/register?ref=5N4NKTCPL4)
+> **Optional: connect [Tushare Pro](https://tushare.pro/) for A-share daily bars and financial data.** Without a token the free sources (AkShare / Baostock / efinance / Tencent / Sina) are used automatically.
 
 ## Local Usage
 
@@ -268,13 +256,12 @@ Advanced configuration (`.env` file or GitHub Actions Secrets):
 | LLM API Key | Configure via `/model add` interactively | Yes |
 | `TUSHARE_TOKEN` | Stock market data (`/config set tushare_token`) | Yes |
 | `SUPABASE_URL` / `SUPABASE_KEY` | Cloud portfolio sync (multi-device) | Optional |
-| `TICKFLOW_API_KEY` | TickFlow real-time / intraday data | Optional |
 | `PORTFOLIO_HKD_CNY_RATE` / `PORTFOLIO_USD_CNY_RATE` | Optional broker FX overrides for CNY portfolio valuation; ECB reference rates are used otherwise | Optional |
 | `FEISHU_WEBHOOK_URL` | Feishu push notifications | Optional |
 | `TG_BOT_TOKEN` + `TG_CHAT_ID` | Telegram push notifications | Optional |
 | `CHAT_TOOL_APPROVAL_SECRET` | Dedicated Web tool-approval signing secret, at least 32 characters; never reuse or derive it from the Supabase service-role key | Required for production Web chat |
 
-> Data source: [TickFlow →](https://tickflow.org/auth/register?ref=5N4NKTCPL4) | LLM API: [1Route →](https://www.1route.dev/register?aff=359904261)
+> Data source: [Tushare Pro](https://tushare.pro/) (optional; free sources are used when unset) | LLM API: [1Route →](https://www.1route.dev/register?aff=359904261)
 
 See the [Architecture doc](ARCHITECTURE.md) for the full config reference and GitHub Actions Secrets setup.
 
@@ -306,8 +293,7 @@ Or add manually in your MCP client config:
     "wyckoff": {
       "command": "wyckoff-mcp",
       "env": {
-        "TUSHARE_TOKEN": "your_token",
-        "TICKFLOW_API_KEY": "your_key"
+        "TUSHARE_TOKEN": "your_token"
       }
     }
   }

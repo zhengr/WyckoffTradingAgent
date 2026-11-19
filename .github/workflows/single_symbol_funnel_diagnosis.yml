@@ -35,8 +35,6 @@ jobs:
     env:
       PYTHONUNBUFFERED: "1"
       FEISHU_WEBHOOK_URL: ${{ secrets.FEISHU_WEBHOOK_URL }}
-      TICKFLOW_API_KEY: ${{ secrets.TICKFLOW_API_KEY }}
-      TICKFLOW_KLINE_RATE_LIMIT_PER_MIN: "110"
       TUSHARE_TOKEN: ${{ secrets.TUSHARE_TOKEN }}
       TZ: Asia/Shanghai
       GITHUB_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}

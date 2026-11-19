@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import os
 from dataclasses import dataclass
 
 import pandas as pd
@@ -201,22 +200,18 @@ def _strategic_stage_reason_map(stage_map: dict[str, str], markup_symbols: list[
 
 
 def _fetch_rescue_klines(seed_codes: list[str]) -> tuple[dict[str, pd.DataFrame], dict[str, pd.DataFrame]]:
+    """L2 救援旁路的 60m/30m 历史分钟线，走 integrations.data_source_minute（无需 API key）。"""
     empty: tuple[dict, dict] = ({}, {})
     if not FUNNEL_STRATEGIC_L2_BYPASS_RESCUE_ENABLED or not seed_codes:
         return empty
-    api_key = os.getenv("TICKFLOW_API_KEY", "").strip()
-    if not api_key:
+    codes = [str(code).strip() for code in seed_codes if str(code or "").strip()]
+    if not codes:
         return empty
     try:
-        from integrations.tickflow_client import TickFlowClient, normalize_cn_symbol
+        from integrations.data_source_minute import fetch_minutes_batch
 
-        symbols = [normalize_cn_symbol(code) for code in seed_codes]
-        symbols = [s for s in symbols if s]
-        if not symbols:
-            return empty
-        client = TickFlowClient(api_key=api_key)
-        df_60m_map = client.get_klines_batch(symbols, period="60m", count=100)
-        df_30m_map = client.get_klines_batch(symbols, period="30m", count=100)
+        df_60m_map = {str(k).strip(): v for k, v in fetch_minutes_batch(codes, period="60m", count=100).items()}
+        df_30m_map = {str(k).strip(): v for k, v in fetch_minutes_batch(codes, period="30m", count=100).items()}
         return df_60m_map, df_30m_map
     except Exception as exc:
         logger.warning("60m/30m rescue klines fetch failed: %s", exc)
@@ -231,17 +226,16 @@ def _rescue_structure_reason_map(
     if not df_60m_map:
         return {}
     from core.intraday_analysis import analyze_rescue_structure
-    from integrations.tickflow_client import normalize_cn_symbol
 
     threshold = FUNNEL_STRATEGIC_L2_BYPASS_RESCUE_MIN_SCORE
     df_30m_map = df_30m_map or {}
     result: dict[str, list[str]] = {}
     for code in seed_codes:
-        sym = normalize_cn_symbol(code)
-        df_60 = df_60m_map.get(sym)
+        code_s = str(code).strip()
+        df_60 = df_60m_map.get(code_s)
         if df_60 is None or getattr(df_60, "empty", True):
             continue
-        df_30 = df_30m_map.get(sym)
+        df_30 = df_30m_map.get(code_s)
         rescue = analyze_rescue_structure(df_60, df_30)
         if rescue.rescue_score >= threshold:
             result[code] = [f"60m结构救援({rescue.rescue_score:.0f}分)", *rescue.rescue_reasons]

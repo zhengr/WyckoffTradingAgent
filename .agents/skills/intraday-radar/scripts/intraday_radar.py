@@ -62,8 +62,54 @@ def resolve_lark_open_id(explicit_id: str | None = None) -> str:
     return ""
 
 
+def _exchange_suffix(code: str) -> str:
+    if code.startswith(("0", "1", "2", "3")):
+        return "SZ"
+    if code.startswith(("4", "8", "9")):
+        return "BJ"
+    return "SH"
+
+
+def _spot_quote_map() -> dict[str, dict[str, Any]]:
+    """Full-market A-share spot snapshot keyed like the radar's .SH/.SZ/.BJ symbols."""
+    from integrations import spot_snapshot
+
+    frame = spot_snapshot.fetch_spot_dataframe()
+    now_ms = int(time.time() * 1000)
+    out: dict[str, dict[str, Any]] = {}
+    for row in frame.to_dict("records"):
+        code = spot_snapshot.normalize_spot_symbol(row.get("代码"))
+        if len(code) != 6:
+            continue
+        symbol = f"{code}.{_exchange_suffix(code)}"
+        price = _quote_float(row.get("最新价"))
+        prev_close = _quote_float(row.get("昨收"))
+        raw_pct = row.get("涨跌幅")
+        pct = _quote_float(raw_pct)
+        if prev_close <= 0 and raw_pct is not None and price > 0 and pct > -100:
+            prev_close = price / (1.0 + pct / 100.0)
+        out[symbol] = {
+            "symbol": symbol,
+            "last_price": price,
+            "prev_close": prev_close,
+            "volume": _quote_float(row.get("成交量")),
+            "amount": _quote_float(row.get("成交额")),
+            "ext": {"name": str(row.get("名称") or row.get("name") or "")},
+            "timestamp": now_ms,
+        }
+    return out
+
+
+def _quote_float(value: Any) -> float:
+    try:
+        result = float(value)
+    except (TypeError, ValueError):
+        return 0.0
+    return result if result == result and abs(result) != float("inf") else 0.0
+
+
 def _normalize_holding_symbol(raw: str) -> str:
-    """Map portfolio 6-digit codes to TickFlow quote keys (.SH/.SZ/.BJ)."""
+    """Map portfolio 6-digit codes to spot quote keys (.SH/.SZ/.BJ)."""
     s = str(raw or "").strip().upper()
     if not s:
         return ""
@@ -348,7 +394,7 @@ def holdings_missing_quote_symbols(
     holdings: dict[str, dict[str, float]],
     curr_quotes: dict[str, dict[str, Any]],
 ) -> list[str]:
-    """Holdings with no usable TickFlow row this frame (stop/plunge would be skipped)."""
+    """Holdings with no usable spot quote this frame (stop/plunge would be skipped)."""
     return [sym for sym in holdings if not compute_quote_metrics(curr_quotes.get(sym, {}))]
 
 
@@ -927,19 +973,21 @@ def send_feishu_tiered_alert(
 
 
 def _backfill_holding_quotes(
-    client: Any,
     curr_quotes: dict[str, dict[str, Any]],
     holdings: dict[str, dict[str, float]],
+    quote_fetcher=None,
 ) -> dict[str, dict[str, Any]]:
-    """Universe snapshots can omit symbols; re-fetch holdings so stop-loss is not silently skipped."""
+    """Universe snapshots can omit symbols; re-read the spot map so stop-loss is not silently skipped."""
     missing = holdings_missing_quote_symbols(holdings, curr_quotes)
     if not missing:
         return curr_quotes
+    fetcher = quote_fetcher or _spot_quote_map
     try:
-        extra = client.get_quotes(symbols=missing)
+        universe = fetcher()
     except Exception as exc:
         print(f"[WARN] Holding quote backfill failed for {missing}: {exc}", file=sys.stderr)
         return curr_quotes
+    extra = {symbol: universe[symbol] for symbol in missing if symbol in universe}
     if not extra:
         return curr_quotes
     merged = dict(curr_quotes)
@@ -967,15 +1015,12 @@ def run_once(args: argparse.Namespace) -> None:
         print(f"[{now_bjt.strftime('%Y-%m-%d %H:%M:%S')}] Outside A-share trading hours, skipping.")
         return
     load_env_file()
-    from integrations.tickflow_client import TickFlowClient
-
-    client = TickFlowClient(api_key=os.environ.get("TICKFLOW_API_KEY", ""))
     l2_map = load_wyckoff_l2_map(args.trace)
     holdings = parse_holdings_arg(args.holding)
     prev_state = json.loads(STATE_PATH.read_text(encoding="utf-8")) if STATE_PATH.exists() else {}
     now_ts = time.time()
-    curr_quotes = client.get_quotes(universes=["CN_Equity_A", "CN_ETF", "CN_Index"])
-    curr_quotes = _backfill_holding_quotes(client, curr_quotes, holdings)
+    curr_quotes = _spot_quote_map()
+    curr_quotes = _backfill_holding_quotes(curr_quotes, holdings)
     level, title, content, red_count, cooldowns = analyze_snapshot_diff(
         curr_quotes,
         prev_state,

@@ -144,7 +144,7 @@ def test_market_regime_crash_caps_candidates_and_tightens_strength():
     assert cfg.rps_fast_min >= 85.0
 
 
-class FakeTickFlowClient:
+class FakeMarketClient:
     def __init__(self) -> None:
         self.quote_batches: list[list[str]] = []
         self.kline_batches: list[list[str]] = []
@@ -183,7 +183,7 @@ class FakeTickFlowClient:
         return _daily_frame()
 
 
-class ManyCandidateTickFlowClient:
+class ManyCandidateMarketClient:
     def __init__(self) -> None:
         self.symbol_count = 0
 
@@ -226,7 +226,7 @@ def test_run_market_funnel_uses_quote_prefilter_and_batch_fetch(tmp_path, monkey
     monkeypatch.setenv("MARKET_FUNNEL_MIN_QUOTE_AMOUNT", "0")
     monkeypatch.setenv("MARKET_FUNNEL_MIN_HISTORY_ROWS", "220")
     output = tmp_path / "hk_result.json"
-    client = FakeTickFlowClient()
+    client = FakeMarketClient()
 
     result = run_market_funnel("hk", output=str(output), client=client)
 
@@ -276,7 +276,7 @@ def test_run_market_funnel_writes_all_candidates_to_db_when_enabled(tmp_path, mo
     monkeypatch.setattr("workflows.market_funnel_job._run_layers", fake_run_layers)
     monkeypatch.setattr("integrations.recommendation_global.upsert_global_recommendations", fake_upsert)
 
-    result = run_market_funnel("us", output=str(tmp_path / "us_result.json"), client=ManyCandidateTickFlowClient())
+    result = run_market_funnel("us", output=str(tmp_path / "us_result.json"), client=ManyCandidateMarketClient())
 
     assert len(result["top_candidates"]) == 100
     assert result["metrics"]["total_hits"] == 105
@@ -310,7 +310,7 @@ def test_upsert_funnel_to_tracking_groups_by_trade_date(monkeypatch):
 
 def test_candidate_rows_enriches_actionable_entry_metrics():
     df = _daily_frame(230).copy()
-    # TickFlow US/HK daily klines have amount=0.0; verify fallback to close*volume via dollar_volume_series.
+    # HK/US daily bars carry no amount; verify fallback to close*volume via dollar_volume_series.
     df["amount"] = 0.0
     rows = _candidate_rows(
         {"spring": [("AAPL.US", 82.0)], "evr": [("WEAK.US", 40.0)]},

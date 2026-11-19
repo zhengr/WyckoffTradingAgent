@@ -1,5 +1,5 @@
 """
-TickFlow 港股/美股 Wyckoff 漏斗工作流。
+港股/美股 Wyckoff 漏斗工作流（腾讯行情 provider）。
 
 流程：标的池实时行情 -> 流动性预筛 -> 批量历史日 K -> Wyckoff 漏斗。
 结果写入本地 artifact / GitHub Summary；US/HK 生产任务会写推荐表供 Web 复盘页读取。
@@ -27,8 +27,7 @@ from core.wyckoff_engine import (
     layer3_sector_resonance,
     layer4_triggers,
 )
-from integrations.tickflow_client import TickFlowClient
-from integrations.tickflow_notice import TICKFLOW_UPGRADE_URL
+from workflows import market_funnel_data as market_data
 from workflows.hk_risk_gate import apply_hk_risk_gate
 from workflows.market_funnel_data import fetch_market_inputs, load_market_symbols
 from workflows.market_funnel_report import (
@@ -359,11 +358,8 @@ def _cap_candidates_for_regime(candidates: list[dict[str, Any]], metrics: dict[s
     return candidates[:limit]
 
 
-def _require_tickflow_client() -> TickFlowClient:
-    api_key = os.getenv("TICKFLOW_API_KEY", "").strip()
-    if not api_key:
-        raise RuntimeError(f"market_funnel_job 需要实时行情数据，请购买 TickFlow：{TICKFLOW_UPGRADE_URL}")
-    return TickFlowClient(api_key=api_key)
+def _market_client():
+    return market_data.default_client()
 
 
 def _build_funnel_result(
@@ -457,10 +453,10 @@ def run_market_funnel(
     market: str,
     *,
     output: str | None = None,
-    client: TickFlowClient | None = None,
+    client: Any | None = None,
 ) -> dict[str, Any]:
     runtime = runtime_config_from_env(market, output)
-    tf = client or _require_tickflow_client()
+    tf = client or _market_client()
     universe_symbols = load_market_symbols(runtime.symbol_path)
     print(
         f"[market-funnel] start market={runtime.spec.key} universe={runtime.spec.universe} "

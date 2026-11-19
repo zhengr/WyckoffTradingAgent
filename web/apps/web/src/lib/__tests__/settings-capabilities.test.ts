@@ -15,8 +15,8 @@ function findRow(rows: SettingsCapabilityRow[], id: SettingsCapabilityId): Setti
 describe('settings capabilities', () => {
   it('marks key settings missing when credentials are empty', () => {
     const rows = buildSettingsCapabilityRows({
-      tickflow: '',
-      savedTickflow: '',
+      tushare: '',
+      savedTushare: '',
       modelProviderLabel: 'DeepSeek',
       modelConfig: { api_key: '', model: '' },
       savedModelConfig: { api_key: '', model: '' },
@@ -30,7 +30,7 @@ describe('settings capabilities', () => {
       unsavedCount: 0,
       missingCount: 2,
       totalCount: 2,
-      hasCrossMarketKline: false,
+      hasMarketData: false,
       hasReadingModel: false,
       isFullyConfigured: false,
       hasUnsavedChanges: false,
@@ -39,60 +39,60 @@ describe('settings capabilities', () => {
 
   it('marks filled-but-unsaved credentials as amber unsaved, not ready', () => {
     const rows = buildSettingsCapabilityRows({
-      tickflow: ' tf-key ',
-      savedTickflow: '',
+      tushare: ' tu-key ',
+      savedTushare: '',
       modelProviderLabel: 'DeepSeek',
       modelConfig: { api_key: 'deepseek-key', model: 'deepseek-v4-flash' },
       savedModelConfig: { api_key: '', model: '' },
     })
-    const tickflow = findRow(rows, 'market-data')
+    const marketData = findRow(rows, 'market-data')
     const model = findRow(rows, 'reading-model')
     const summary = summarizeSettingsCapabilities(rows)
 
-    expect(tickflow.status).toBe('unsaved')
-    expect(tickflow.isReady).toBe(false)
-    expect(tickflow.isUnsaved).toBe(true)
+    expect(marketData.status).toBe('unsaved')
+    expect(marketData.isReady).toBe(false)
+    expect(marketData.isUnsaved).toBe(true)
     expect(model.status).toBe('unsaved')
     expect(summary).toMatchObject({
       readyCount: 0,
       unsavedCount: 2,
       missingCount: 0,
-      hasCrossMarketKline: false,
+      hasMarketData: false,
       hasReadingModel: false,
       isFullyConfigured: false,
       hasUnsavedChanges: true,
     })
   })
 
-  it('treats TickFlow as ready only after saved credentials match the draft', () => {
+  it('treats Tushare as ready only after saved credentials match the draft', () => {
     const rows = buildSettingsCapabilityRows({
-      tickflow: ' tf-key ',
-      savedTickflow: 'tf-key',
+      tushare: ' tu-key ',
+      savedTushare: 'tu-key',
       modelProviderLabel: 'DeepSeek',
       modelConfig: { api_key: '', model: '' },
       savedModelConfig: { api_key: '', model: '' },
     })
-    const tickflow = findRow(rows, 'market-data')
+    const marketData = findRow(rows, 'market-data')
     const summary = summarizeSettingsCapabilities(rows)
 
-    expect(tickflow.status).toBe('ready')
-    expect(tickflow.isReady).toBe(true)
-    expect(tickflow.priority).toBe('primary')
-    expect(summary.hasCrossMarketKline).toBe(true)
+    expect(marketData.status).toBe('ready')
+    expect(marketData.isReady).toBe(true)
+    expect(marketData.priority).toBe('primary')
+    expect(summary.hasMarketData).toBe(true)
     expect(summary.readyCount).toBe(1)
   })
 
   it('requires both an API key and model name for the reading model', () => {
     const missingModelRows = buildSettingsCapabilityRows({
-      tickflow: '',
-      savedTickflow: '',
+      tushare: '',
+      savedTushare: '',
       modelProviderLabel: 'DeepSeek',
       modelConfig: { api_key: 'deepseek-key', model: '' },
       savedModelConfig: { api_key: '', model: '' },
     })
     const readyRows = buildSettingsCapabilityRows({
-      tickflow: '',
-      savedTickflow: '',
+      tushare: '',
+      savedTushare: '',
       modelProviderLabel: 'DeepSeek',
       modelConfig: { api_key: 'deepseek-key', model: 'deepseek-v4-flash' },
       savedModelConfig: { api_key: 'deepseek-key', model: 'deepseek-v4-flash' },
@@ -105,8 +105,8 @@ describe('settings capabilities', () => {
 
   it('marks model unsaved when provider switched before save', () => {
     const rows = buildSettingsCapabilityRows({
-      tickflow: 'tf-key',
-      savedTickflow: 'tf-key',
+      tushare: 'tu-key',
+      savedTushare: 'tu-key',
       modelProviderLabel: 'DeepSeek',
       modelConfig: { api_key: 'deepseek-key', model: 'deepseek-v4-flash' },
       savedModelConfig: { api_key: 'old-key', model: 'old-model' },
@@ -119,8 +119,8 @@ describe('settings capabilities', () => {
 
   it('summarizes fully configured key settings', () => {
     const rows = buildSettingsCapabilityRows({
-      tickflow: 'tf-key',
-      savedTickflow: 'tf-key',
+      tushare: 'tu-key',
+      savedTushare: 'tu-key',
       modelProviderLabel: 'DeepSeek',
       modelConfig: { api_key: 'deepseek-key', model: 'deepseek-v4-flash' },
       savedModelConfig: { api_key: 'deepseek-key', model: 'deepseek-v4-flash' },
@@ -131,7 +131,7 @@ describe('settings capabilities', () => {
       unsavedCount: 0,
       missingCount: 0,
       totalCount: 2,
-      hasCrossMarketKline: true,
+      hasMarketData: true,
       hasReadingModel: true,
       isFullyConfigured: true,
       hasUnsavedChanges: false,

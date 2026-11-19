@@ -3,7 +3,7 @@
 ## 为什么需要这条链路
 
 用户可能在 web 端配好了模型（Gemini / OpenAI / DeepSeek / Anthropic）和行情数据源
-（TickFlow）。桌面端登录之后如果不拉下来，界面上仍然是「未配置模型」—— 用户会以为
+（Tushare）。桌面端登录之后如果不拉下来，界面上仍然是「未配置模型」—— 用户会以为
 登录没生效，或者以为要再配一遍。
 
 **这是一条新链路，不是接线。** Python 侧从来没读过 `user_settings` 表：本地配置
@@ -37,7 +37,6 @@ logger = logging.getLogger(__name__)
 # 只列真正需要的：这张表还有 chat_provider / custom_providers 等字段，
 # 但本地的模型配置是一个 models 列表结构（见 _merge_models），不是平铺的键。
 _DATA_SOURCE_KEYS = {
-    "tickflow_api_key": "tickflow_api_key",
     "tushare_token": "tushare_token",
 }
 

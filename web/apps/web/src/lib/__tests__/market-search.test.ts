@@ -40,7 +40,7 @@ describe('market search', () => {
     expect(rows[0]?.name).toBe('中国平安')
   })
 
-  it('resolves US aliases to TickFlow symbols', async () => {
+  it('resolves US aliases to market symbols', async () => {
     const row = await resolveStockQuery('苹果')
     expect(row?.analysisCode).toBe('AAPL.US')
     expect(row?.name).toBe('Apple')

@@ -7,13 +7,13 @@ const fetchedAt = '2026-07-18T10:00:00.000Z'
 function snapshot(): MarketWatchSnapshot {
   return {
     state: 'ready',
-    source: 'tickflow',
+    source: 'server',
     requestedCodes,
     fetchedAt,
     fromCache: false,
     quotes: [
-      { requestedCode: '000001', symbol: '000001.SZ', price: 10, changePct: 1.2, previousClose: 9.88, volume: 100, asOf: fetchedAt },
-      { requestedCode: 'AAPL.US', symbol: 'AAPL.US', price: 200, changePct: -0.5, previousClose: 201, volume: 200, asOf: fetchedAt },
+      { requestedCode: '000001', symbol: 'sh000001', price: 10, changePct: 1.2, previousClose: 9.88, volume: 100, asOf: fetchedAt },
+      { requestedCode: 'AAPL.US', symbol: 'usAAPL', price: 200, changePct: -0.5, previousClose: 201, volume: 200, asOf: fetchedAt },
     ],
   }
 }

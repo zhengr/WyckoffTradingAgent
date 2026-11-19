@@ -16,13 +16,13 @@ from integrations.recommendation_global import (
     upsert_global_recommendation_tracking_updates,
 )
 from integrations.recommendation_tracking_common import (
-    close_map_from_tickflow_hist,
+    close_map_from_hist,
     empty_tracking_refresh_summary,
-    fetch_tickflow_tracking_market_data,
+    fetch_tracking_market_data,
     parse_recommend_date,
     quote_trade_date_yyyymmdd,
     recommend_date_to_yyyymmdd,
-    resolve_tickflow_quote_price,
+    resolve_quote_price,
     tracking_update_from_close_map,
 )
 from integrations.supabase_base import create_admin_client, is_admin_configured, require_server_write_context
@@ -36,23 +36,21 @@ from utils.env import env_flag
 logger = logging.getLogger(__name__)
 
 
-def _build_tickflow_tracking_updates(
+def _build_tracking_updates(
     grouped: dict[str, list[dict[str, Any]]],
     quotes: dict[str, dict[str, Any]],
     hist_map: dict[str, pd.DataFrame],
     now_iso: str,
 ) -> tuple[list[dict[str, Any]], int, str]:
-    from integrations.tickflow_client import normalize_cn_symbol
-
     updates: list[dict[str, Any]] = []
     codes_no_data = 0
     latest_trade_date = ""
     for code, rows in grouped.items():
-        sym = normalize_cn_symbol(code)
+        sym = code
         quote = quotes.get(sym) or {}
-        current_price = resolve_tickflow_quote_price(quote)
+        current_price = resolve_quote_price(quote)
         latest_trade_date = max(latest_trade_date, quote_trade_date_yyyymmdd(quote))
-        close_map = close_map_from_tickflow_hist(hist_map.get(sym))
+        close_map = close_map_from_hist(hist_map.get(sym))
         trade_dates = sorted(close_map)
         if current_price <= 0 and trade_dates:
             current_price = float(close_map[trade_dates[-1]])
@@ -61,13 +59,13 @@ def _build_tickflow_tracking_updates(
             codes_no_data += 1
             continue
         for row in rows:
-            update = _tickflow_tracking_update(row, code, trade_dates, close_map, current_price, now_iso)
+            update = _tracking_update(row, code, trade_dates, close_map, current_price, now_iso)
             if update is not None:
                 updates.append(update)
     return updates, codes_no_data, latest_trade_date
 
 
-def _tickflow_tracking_update(
+def _tracking_update(
     row: dict[str, Any],
     code: str,
     trade_dates: list[str],
@@ -406,25 +404,19 @@ def _build_tushare_tracking_updates(
     return updates, codes_no_data, latest_trade_date
 
 
-def refresh_tracking_prices_with_tickflow_realtime() -> dict[str, Any]:
+def refresh_tracking_prices_realtime() -> dict[str, Any]:
     if not is_admin_configured():
         raise ValueError("SUPABASE_URL/SUPABASE_SERVICE_ROLE_KEY 未配置")
     require_server_write_context("refresh CN tracking prices")
-    api_key = os.getenv("TICKFLOW_API_KEY", "").strip()
-    if not api_key:
-        raise ValueError("TICKFLOW_API_KEY 未配置")
-    from integrations.tickflow_client import normalize_cn_symbol
-
     client = create_admin_client()
     records = fetch_recommendation_tracking_records(client, "id,code,recommend_date")
     if not records:
         return empty_tracking_refresh_summary()
     grouped = _group_records_by_code6(records)
-    symbols = [normalize_cn_symbol(code) for code in sorted(grouped)]
-    symbols = [symbol for symbol in symbols if symbol]
-    batch_size = max(min(int(os.getenv("RECOMMENDATION_TICKFLOW_BATCH_SIZE", "80")), 200), 1)
-    quotes, hist_map = fetch_tickflow_tracking_market_data(api_key, symbols, batch_size)
-    updates, codes_no_data, latest_trade_date = _build_tickflow_tracking_updates(
+    symbols = [code for code in sorted(grouped) if code]
+    batch_size = max(min(int(os.getenv("RECOMMENDATION_TRACKING_BATCH_SIZE", "80")), 200), 1)
+    quotes, hist_map = fetch_tracking_market_data("", symbols, batch_size)
+    updates, codes_no_data, latest_trade_date = _build_tracking_updates(
         grouped,
         quotes,
         hist_map,
@@ -437,18 +429,14 @@ def refresh_global_tracking_prices(market: str) -> dict[str, Any]:
     if not is_admin_configured():
         raise ValueError("SUPABASE_URL/SUPABASE_SERVICE_ROLE_KEY 未配置")
     require_server_write_context(f"refresh global tracking prices {market}")
-    api_key = os.getenv("TICKFLOW_API_KEY", "").strip()
-    if not api_key:
-        raise ValueError("TICKFLOW_API_KEY 未配置")
-
     client = create_admin_client()
     records = fetch_global_recommendation_tracking_records(client, market, "id,code,recommend_date")
     if not records:
         return empty_tracking_refresh_summary()
     grouped = _group_global_records_by_symbol(records)
-    batch_size = max(min(int(os.getenv("RECOMMENDATION_TICKFLOW_BATCH_SIZE", "80")), 200), 1)
-    quotes, hist_map = fetch_tickflow_tracking_market_data(api_key, sorted(grouped), batch_size)
-    updates, codes_no_data, latest_trade_date = build_global_tickflow_tracking_updates(
+    batch_size = max(min(int(os.getenv("RECOMMENDATION_TRACKING_BATCH_SIZE", "80")), 200), 1)
+    quotes, hist_map = fetch_tracking_market_data("", sorted(grouped), batch_size)
+    updates, codes_no_data, latest_trade_date = build_global_tracking_updates(
         grouped,
         quotes,
         hist_map,
@@ -465,7 +453,7 @@ def refresh_global_tracking_prices(market: str) -> dict[str, Any]:
     }
 
 
-def build_global_tickflow_tracking_updates(
+def build_global_tracking_updates(
     grouped: dict[str, list[dict[str, Any]]],
     quotes: dict[str, dict[str, Any]],
     hist_map: dict[str, pd.DataFrame],
@@ -476,9 +464,9 @@ def build_global_tickflow_tracking_updates(
     latest_trade_date = ""
     for symbol, rows in grouped.items():
         quote = quotes.get(symbol) or {}
-        current_price = resolve_tickflow_quote_price(quote)
+        current_price = resolve_quote_price(quote)
         latest_trade_date = max(latest_trade_date, quote_trade_date_yyyymmdd(quote))
-        close_map = close_map_from_tickflow_hist(hist_map.get(symbol))
+        close_map = close_map_from_hist(hist_map.get(symbol))
         trade_dates = sorted(close_map)
         current_price = _resolve_global_current_price(current_price, close_map, trade_dates)
         latest_trade_date = max(latest_trade_date, trade_dates[-1] if trade_dates else "")

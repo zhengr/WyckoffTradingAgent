@@ -11,7 +11,7 @@ from workflows.backtest_snapshot_fetch_hk_us import run_snapshot_fetch
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="US stock backtest snapshot fetcher (TickFlow)")
+    parser = argparse.ArgumentParser(description="US stock backtest snapshot fetcher")
     parser.add_argument("--start", required=True, help="Backtest start date YYYY-MM-DD")
     parser.add_argument("--end", required=True, help="Backtest end date YYYY-MM-DD")
     parser.add_argument("--trading-days", type=int, default=320, help="Lookback window in trading days")

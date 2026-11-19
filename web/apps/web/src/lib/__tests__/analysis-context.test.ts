@@ -11,7 +11,7 @@ describe('analysis context pack', () => {
         { date: '2026-07-13', open: 104, high: 108, low: 103, close: 106, volume: 1200 },
       ],
       dataQuality: {
-        source: 'tickflow',
+        source: 'tushare',
         latestTradingDate: '2026-07-13',
         coverageStart: '2026-07-10',
         coverageEnd: '2026-07-13',
@@ -22,7 +22,7 @@ describe('analysis context pack', () => {
       },
       valueSnapshot: {
         symbol: '600519.SH',
-        source: 'tickflow',
+        source: 'tushare',
         metrics: { period_end: '2026-03-31', roe: 18.2 },
       },
     })
@@ -31,7 +31,7 @@ describe('analysis context pack', () => {
     expect(pack.technical.changePct).toBeCloseTo(1.923, 2)
     expect(pack.technical.ma20).toBe(105)
     expect(pack.evidence).toHaveLength(2)
-    expect(formatAnalysisContextPack(pack)).toContain('market_data | tickflow | 600519 | 2026-07-13')
-    expect(formatAnalysisContextPack(pack)).toContain('fundamental_data | tickflow | 600519 | 2026-03-31')
+    expect(formatAnalysisContextPack(pack)).toContain('market_data | tushare | 600519 | 2026-07-13')
+    expect(formatAnalysisContextPack(pack)).toContain('fundamental_data | tushare | 600519 | 2026-03-31')
   })
 })

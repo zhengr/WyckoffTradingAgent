@@ -56,7 +56,7 @@ workflow is changed.
 
 The supported deployment here is a local **stdio process for one user**, inheriting
 that user's explicit environment or local CLI session on its first domain call.
-That first call also seeds `TUSHARE_TOKEN` / `TICKFLOW_API_KEY` from `~/.wyckoff/wyckoff.json`
+That first call also seeds `TUSHARE_TOKEN` from `~/.wyckoff/wyckoff.json`
 (`wyckoff config`), exactly as the CLI does; values already in the process environment win.
 This is required because a signed-in principal's `get_credential` deliberately reads only
 cloud credentials and never falls back to local config.

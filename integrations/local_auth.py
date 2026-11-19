@@ -512,7 +512,7 @@ def load_config() -> dict[str, Any]:
         return {}
 
 
-_DATA_SOURCE_ENV_KEYS = (("tushare_token", "TUSHARE_TOKEN"), ("tickflow_api_key", "TICKFLOW_API_KEY"))
+_DATA_SOURCE_ENV_KEYS = (("tushare_token", "TUSHARE_TOKEN"),)
 
 
 def seed_data_source_env() -> None:
@@ -578,7 +578,7 @@ def save_cloud_data_source(user_id: str, key: str, value: str) -> bool:
         # Config lock is held here; session is flipped/cleared by login/logout under
         # _AUTH_IDENTITY_LOCK. Refuse if disk identity already moved — otherwise a
         # pull that passed _session_still_belongs_to before the switch still writes
-        # Alice's TickFlow/Tushare into Bob's machine (#596/#610 residual).
+        # Alice's data-source credentials into Bob's machine (#596/#610 residual).
         if not _disk_session_matches(user_id):
             logger.warning("refusing cloud data-source write: disk identity != %s", user_id)
             return False

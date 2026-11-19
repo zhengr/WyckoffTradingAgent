@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from datetime import date, datetime, timedelta, timezone
+from datetime import date
 
 import pandas as pd
 
@@ -55,6 +55,23 @@ def to_ts_code(symbol: str) -> str:
     return f"{code}.SH" if code.startswith(SH_PREFIXES) else f"{code}.SZ"
 
 
+def normalize_cn_exchange_code(symbol: str) -> str:
+    """6 位 A 股代码 → 带交易所后缀代码（.SH/.SZ/.BJ），已是后缀形式则原样返回。"""
+    raw = str(symbol or "").strip().upper()
+    if not raw:
+        return ""
+    if "." in raw and len(raw.split(".", 1)[0]) == 6:
+        return raw
+    digits = "".join(ch for ch in raw if ch.isdigit())
+    if len(digits) != 6:
+        return raw
+    if digits.startswith(("0", "1", "2", "3")):
+        return f"{digits}.SZ"
+    if digits.startswith(("4", "8", "9")):
+        return f"{digits}.BJ"
+    return f"{digits}.SH"
+
+
 def tag_source(df: pd.DataFrame, source: str) -> pd.DataFrame:
     df.attrs["source"] = source
     return df
@@ -83,64 +100,6 @@ def normalize_efinance_columns(df: pd.DataFrame) -> pd.DataFrame:
     return work[list(STOCK_HIST_COLUMNS)].copy()
 
 
-def tickflow_daily_window(start: str, end: str) -> tuple[date, date, int, int]:
-    try:
-        start_d = datetime.strptime(start, "%Y%m%d").date()
-        end_d = datetime.strptime(end, "%Y%m%d").date()
-    except Exception as exc:
-        raise RuntimeError(f"tickflow date parse failed: {start}..{end}") from exc
-    if end_d < start_d:
-        raise RuntimeError(f"tickflow invalid range: {start}..{end}")
-    cn_tz = timezone(timedelta(hours=8))
-    start_dt = datetime.combine(start_d, datetime.min.time(), tzinfo=cn_tz)
-    end_dt = datetime.combine(end_d + timedelta(days=1), datetime.min.time(), tzinfo=cn_tz) - timedelta(milliseconds=1)
-    return start_d, end_d, int(start_dt.timestamp() * 1000), int(end_dt.timestamp() * 1000)
-
-
-def tickflow_daily_count(start_d: date, end_d: date, max_count: int) -> int:
-    day_span = (end_d - start_d).days + 1
-    return min(max(day_span * 2 + 16, 64), max(int(max_count), 64))
-
-
-def tickflow_adjust_mode(adjust: str) -> str:
-    adjust_norm = str(adjust or "").strip().lower()
-    mapped = {
-        "": "none",
-        "none": "none",
-        "qfq": "forward",
-        "forward": "forward",
-        "hfq": "backward",
-        "backward": "backward",
-    }
-    return mapped.get(adjust_norm, "forward")
-
-
-def tickflow_daily_frame(df: pd.DataFrame, start_d: date, end_d: date) -> pd.DataFrame:
-    out = df[(df["date"] >= start_d.isoformat()) & (df["date"] <= end_d.isoformat())].copy()
-    if out.empty:
-        raise RuntimeError("tickflow empty in range")
-    close = pd.to_numeric(out.get("close"), errors="coerce")
-    prev_close = pd.to_numeric(out.get("prev_close"), errors="coerce")
-    prev_ref = prev_close.where(prev_close > 0)
-    if prev_ref.notna().sum() == 0:
-        prev_ref = close.shift(1)
-    result = pd.DataFrame(
-        {
-            "日期": out["date"],
-            "开盘": pd.to_numeric(out.get("open"), errors="coerce"),
-            "最高": pd.to_numeric(out.get("high"), errors="coerce"),
-            "最低": pd.to_numeric(out.get("low"), errors="coerce"),
-            "收盘": close,
-            "成交量": pd.to_numeric(out.get("volume"), errors="coerce"),
-            "成交额": pd.to_numeric(out.get("amount"), errors="coerce"),
-            "涨跌幅": (close / prev_ref - 1.0) * 100.0,
-            "换手率": pd.NA,
-            "振幅": _tickflow_amplitude(out, prev_ref),
-        }
-    )
-    return result[list(STOCK_HIST_COLUMNS)].copy()
-
-
 def _rename_prefixed_column(df: pd.DataFrame, standard: str) -> None:
     if standard in df.columns:
         return
@@ -148,9 +107,3 @@ def _rename_prefixed_column(df: pd.DataFrame, standard: str) -> None:
         if str(column).startswith(standard):
             df.rename(columns={column: standard}, inplace=True)
             return
-
-
-def _tickflow_amplitude(df: pd.DataFrame, prev_ref: pd.Series) -> pd.Series:
-    high = pd.to_numeric(df.get("high"), errors="coerce")
-    low = pd.to_numeric(df.get("low"), errors="coerce")
-    return (high - low) / prev_ref * 100.0

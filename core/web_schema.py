@@ -71,7 +71,6 @@ TABLE_DDL: tuple[tuple[str, str], ...] = (
   anthropic_model text not null default '',
   anthropic_base_url text not null default '',
   custom_providers jsonb not null default '{}'::jsonb,
-  tickflow_api_key text not null default '',
   tushare_token text not null default '',
   feishu_webhook text not null default '',
   wecom_webhook text not null default '',

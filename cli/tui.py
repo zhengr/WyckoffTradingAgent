@@ -3048,7 +3048,7 @@ class WyckoffTUI(App):
                 "\n[bold]可用命令[/bold]\n"
                 "  /model   — 切换模型（list/add/rm/default）\n"
                 "  /theme   — 切换终端配色主题（transparent/auto/dracula/nord/monokai...）\n"
-                "  /config  — 数据源配置（tushare_token, tickflow_api_key）\n"
+                "  /config  — 数据源配置（tushare_token）\n"
                 "  /login   — 登录\n"
                 "  /logout  — 退出登录\n"
                 "  /token   — Token 用量\n"
@@ -3124,7 +3124,7 @@ class WyckoffTUI(App):
         else:
             log.write(
                 Text.from_markup(
-                    "[dim]/config 用法: /config | /config set tushare_token | tickflow_api_key | "
+                    "[dim]/config 用法: /config | /config set tushare_token | "
                     "stream_chunk_timeout_seconds | tool_timeout_seconds[/dim]"
                 )
             )
@@ -3862,12 +3862,6 @@ class WyckoffTUI(App):
 
     _CONFIG_KEYS = {
         "tushare_token": ("Tushare Token", "TUSHARE_TOKEN", "", "secret"),
-        "tickflow_api_key": (
-            "TickFlow API Key",
-            "TICKFLOW_API_KEY",
-            "购买: https://tickflow.org/auth/register?ref=5N4NKTCPL4",
-            "secret",
-        ),
         "stream_chunk_timeout_seconds": (
             "模型空闲/首token超时(秒)",
             "",

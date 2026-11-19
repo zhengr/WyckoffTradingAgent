@@ -60,7 +60,7 @@ def evaluate_recommendation_events(
         logger.exception("evaluate_recommendation_events error")
         return {
             "error": str(exc),
-            "hint": "需要 SUPABASE_URL/SUPABASE_SERVICE_ROLE_KEY 和 TICKFLOW_API_KEY 可用，且推荐追踪表存在近期记录。",
+            "hint": "需要 SUPABASE_URL/SUPABASE_SERVICE_ROLE_KEY 可用，且推荐追踪表存在近期记录。",
         }
 
 

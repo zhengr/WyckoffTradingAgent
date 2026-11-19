@@ -1,5 +1,7 @@
 # Streamlit MVP 产品架构归档
 
+> 注：本文为已归档的 MVP 架构记录，其中的 TickFlow 字样为历史数据源（TickFlow 已于 2026-11-19 移除）。
+
 [← 返回 README](../README.md)
 
 > 状态：Streamlit 已经不再迭代维护，`main` 分支已全面移除 Streamlit 运行代码、依赖和 CI 路径。历史代码仍保留在 `release/streamlit` 分支。

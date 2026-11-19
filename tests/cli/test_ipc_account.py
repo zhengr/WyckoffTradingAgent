@@ -74,12 +74,12 @@ class TestSettings:
             "integrations.local_auth.load_model_configs",
             lambda: [{"id": "m1", "model": "x", "provider_name": "p", "api_key": "sk-secret"}],
         )
-        monkeypatch.setattr("integrations.local_auth.load_config", lambda: {"tickflow_api_key": "tk-secret"})
+        monkeypatch.setattr("integrations.local_auth.load_config", lambda: {"tushare_token": "tk-secret"})
         result = _result("settings_get")
         assert "sk-secret" not in str(result)
         assert "tk-secret" not in str(result)
         assert result["models"][0]["has_key"] is True
-        assert result["has_tickflow_key"] is True
+        assert result["has_tushare_token"] is True
 
     def test_settings_set_rejects_unlisted_key(self) -> None:
         with pytest.raises(MethodError) as excinfo:

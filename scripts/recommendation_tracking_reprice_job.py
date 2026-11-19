@@ -13,7 +13,7 @@ from workflows.recommendation_tracking_reprice_job import (
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="形态复盘价格回填任务（Tickflow 实时报价）")
+    parser = argparse.ArgumentParser(description="形态复盘价格回填任务")
     parser.add_argument("--logs", default="", help="日志文件路径（可选）")
     parser.add_argument("--market", default="cn", choices=["cn", "us", "hk"], help="市场（默认 cn）")
     return parser.parse_args()

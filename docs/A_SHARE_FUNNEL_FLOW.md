@@ -13,7 +13,7 @@
 flowchart TB
     subgraph UPSTREAM["⬆️ 上游（漏斗运行前已存在）"]
         U1["GitHub Actions 触发<br/>wyckoff_funnel.yml<br/>周日到周四 17:17 北京<br/>周日为周一实盘准备候选"]
-        U2["环境变量 / Secrets<br/>TICKFLOW / TUSHARE / LLM / Supabase / IM"]
+        U2["环境变量 / Secrets<br/>TUSHARE / LLM / Supabase / IM"]
         U3["本地元数据<br/>行业映射 / 概念映射 / 股票池"]
         U4["前日反馈闭环<br/>signal_health_daily<br/>signal_registry"]
         U5["前日盘前风控<br/>Codex Automation → workflow_dispatch<br/>premarket_risk → market_signal_daily"]
@@ -156,9 +156,9 @@ flowchart TD
         P0["解析交易日窗口<br/>320 个交易日"]
         P1["加载股票池<br/>主板 + 创业板 + 科创板 → 去 ST"]
         P2["加载元数据<br/>行业 / 概念 / 概念热度 / 市值 / 名称"]
-        P3["TickFlow 财务指标（按需）<br/>仅质量/基本面筛选显式启用"]
+        P3["数据源财务指标（按需）<br/>仅质量/基本面筛选显式启用"]
         P4["拉取基准指数<br/>000001 + 小盘指数"]
-        P5["fetch_all_ohlcv 批量拉 K 线<br/>TickFlow → tushare → akshare → baostock → efinance"]
+        P5["fetch_all_ohlcv 批量拉 K 线<br/>tushare → akshare → baostock → efinance → tencent → sina"]
         P6["dump funnel_snapshots<br/>离线快照"]
         P7["ETF 已从 A 股漏斗移除<br/>用户卡片不再渲染 ETF"]
         P8["加载 external_seeds<br/>追加到观察池"]
@@ -283,7 +283,7 @@ ABC 门槛松紧不是问题所在：met=2 与 met=3 的差异在 1/3/5/10 日�
 
 - 完整研究池以 `research_discovery_v1` 写入同一次运行的 `review_trace`，并透传报告详情和 Agent。研究并集含 L2/近 L2、候选车道、主线和趋势雷达；独立的 `signal_counts` / `execution_counts` 避免把“被市场拦截”误记为“没有发现”。卡片只列明确标注的示例，结构化名单不截断；新字段始终为研究状态，不授予跨日确认或 OMS 权限。
 - 研究池兼容增加 `by_source`（每来源按代码去重的总数、信号及执行计数）与 `blocker_counts`（每只股票每个原因最多一次）。卡片按来源分列并显示主要原因、行情截止日；同一股票的多个来源或原因不能相加，本层没有confirmed、OMS或真实成交的晋级判断。
-- 换手率装配保留有效原生值，仅填缺值。生产按 `window.end_trade_date` 查当日流通股本，不读取无日期旧缓存；缺数据保留缺失。未指定日期的元数据读取按最近5个交易日回退，日历不可用不猜自然日。TickFlow/AkShare/efinance的A股量为手、折算股数先乘100；Tushare适配器已乘100、Baostock为股，不重复换算。显式`volume_unit=shares/lots`优先于来源约定，未知单位不估算；原始volume列不改写。
+- 换手率装配保留有效原生值，仅填缺值。生产按 `window.end_trade_date` 查当日流通股本，不读取无日期旧缓存；缺数据保留缺失。未指定日期的元数据读取按最近5个交易日回退，日历不可用不猜自然日。AkShare/efinance 的 A 股量为手、折算股数先乘100；Tushare 适配器已乘100、Baostock 为股，不重复换算。显式`volume_unit=shares/lots`优先于来源约定，未知单位不估算；原始volume列不改写。
 - `float_share_snapshot`及`native+float_share_snapshot`明确标记目标日股本估算，`turnover_share_asof`记录日期；并非逐日历史流通股本，不能称全历史PIT已修复。换手覆盖只认最新日期行有限非负值（0有效，NaN/无穷/负数无效），保持95%门槛。`turnover_source_counts`与`turnover_missing_reasons`解释有效来源及缺失分类；现代及旧版卡片均展示质量摘要。数据纠正可以改变换手条件的候选，不等于样本外收益改善。
 - 回放默认不读快照的 `turnover`，EVR 换手下限不生效。Backtest Grid 的 `pit_turnover` 开启后使用 `date_keyed_native_pct_v1`：按历史日期键取 Tushare 原生百分比换手，缺失保留 NaN，无合同的快照不读该列，以免批量行与单票回退行口径混用。严格模式逐评估日校验 95% 覆盖。该合同不消除股票池、静态元数据或其它前视偏差。
 - 有效主线买点条目不再提前 Top3，最终 AI 总额、单行业和主题晋级上限仍按原设置执行。主线补充分数使用 `mainline_score × 100`，不降低同票原有更高分。
@@ -380,7 +380,7 @@ flowchart TD
     IN2["规则准入 candidate_meta<br/>confirmed + market/policy guards"] --> S4
     IN3["Supabase portfolios<br/>USER_LIVE:user_id"] --> S4
     IN4["market_signal_daily<br/>benchmark + premarket"] --> S4
-    IN5["TickFlow 持仓分时诊断"] --> S4
+    IN5["持仓分时诊断（统一行情仓库层）"] --> S4
 
     S4["run_step4()"] --> IDEM{"幂等检查<br/>同日同持仓快照已跑?"}
     IDEM -->|是| SKIP["跳过"]
@@ -539,16 +539,16 @@ flowchart LR
 ## 十、数据源降级链（OHLCV）
 
 ```
-TickFlow (优先, qfq 前复权)
+Tushare (优先, qfq 前复权)
   ↓ 批量结果仅部分缺失：先剔除当日停牌，仅对其余缺口回补
-  ↓ 失败
-Tushare
   ↓ 失败
 AkShare
   ↓ 失败
 Baostock
   ↓ 失败
 efinance
+  ↓ 失败
+Tencent / Sina
 ```
 
 - A 股漏斗不再拉取或展示 ETF/LOF 旁路；L1 已用 `is_supported_cn_board` 丢掉 51/159/56/513/588。漏斗卡片 `name_map` 不再合并 ETF 名称。用户卡片与推荐名单不刷新 ETF 名称。

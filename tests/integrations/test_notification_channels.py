@@ -14,7 +14,6 @@ def test_split_telegram_message_splits_long_lines() -> None:
 def test_send_to_telegram_posts_numbered_chunks(monkeypatch) -> None:
     calls: list[dict] = []
     monkeypatch.delenv("PROXY_URL", raising=False)
-    monkeypatch.setattr(telegram, "append_tickflow_limit_hint", lambda text: str(text or ""))
 
     def fake_post(url, *, json, timeout, proxies):
         calls.append({"url": url, "json": json, "timeout": timeout, "proxies": proxies})
@@ -30,7 +29,6 @@ def test_send_to_telegram_posts_numbered_chunks(monkeypatch) -> None:
 
 def test_enterprise_markdown_webhooks_shape_payload(monkeypatch) -> None:
     calls: list[dict] = []
-    monkeypatch.setattr(markdown_webhooks, "append_tickflow_limit_hint", lambda text: str(text or ""))
 
     def fake_post(url, *, headers, json, timeout):
         calls.append({"url": url, "headers": headers, "json": json, "timeout": timeout})

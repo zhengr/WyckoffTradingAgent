@@ -24,7 +24,7 @@ def _boom(*_args, **_kwargs):
 
 @pytest.fixture(autouse=True)
 def _clean(monkeypatch):
-    for name in ("TUSHARE_TOKEN", "TICKFLOW_API_KEY", "GEMINI_API_KEY"):
+    for name in ("TUSHARE_TOKEN", "UNUSED_API_KEY", "GEMINI_API_KEY"):
         monkeypatch.delenv(name, raising=False)
     yield
     tushare_client.set_runtime_token("")
@@ -45,11 +45,11 @@ def test_credentials_come_only_from_the_request(monkeypatch):
 
 
 def test_a_missing_key_is_missing_not_looked_up_elsewhere(monkeypatch):
-    monkeypatch.setenv("TICKFLOW_API_KEY", "env-key")
+    monkeypatch.setenv("UNUSED_API_KEY", "env-key")
     monkeypatch.setattr(tc, "load_user_credentials", _boom)
     monkeypatch.setattr("integrations.local_auth.load_config", _boom)
 
-    assert get_credential(_ctx({"tushare_token": "t"}), "tickflow_api_key", "TICKFLOW_API_KEY") == ""
+    assert get_credential(_ctx({"tushare_token": "t"}), "unused_api_key", "UNUSED_API_KEY") == ""
 
 
 def test_an_empty_credentials_dict_still_isolates(monkeypatch):

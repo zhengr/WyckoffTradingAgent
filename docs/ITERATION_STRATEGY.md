@@ -1,5 +1,7 @@
 # Wyckoff 系统迭代与研究治理
 
+> 注：本文为历史研究记录，其中的 TickFlow 字样描述的是当时的数据源（TickFlow 已于 2026-11-19 作为数据源移除，行情改走 Tushare 及免费降级源）。
+
 > 本页只回答“下一步研究什么、证据达到什么标准才能晋级”。反馈表、动态策略字段和 Shadow 查询口径统一见
 > [`SIGNAL_FEEDBACK_LOOP.md`](SIGNAL_FEEDBACK_LOOP.md)；Agent Runtime 的实现边界统一见
 > [`ARCHITECTURE.md`](ARCHITECTURE.md#agent-架构)。

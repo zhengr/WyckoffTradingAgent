@@ -13,7 +13,7 @@ import { StockSearchBox, matchesSelectedQuery, useStockSearch, type StockSearchC
 import { usePreferences } from '@/lib/preferences'
 import { AIDisclaimer } from '@/components/ai-disclaimer'
 import { detectWyckoffAnnotations } from '@/lib/wyckoff-detect'
-import { TICKFLOW_PURCHASE, buildStockAnalysisContextPack, fetchValueSnapshotWithFetch, formatAnalysisContextPack, isSupportedKlineCode } from '@wyckoff/shared'
+import { buildStockAnalysisContextPack, fetchValueSnapshotWithFetch, formatAnalysisContextPack, isSupportedKlineCode } from '@wyckoff/shared'
 import type { AnalysisContextPack, KlineDataQuality, KlineRow, ValueSnapshot } from '@wyckoff/shared'
 import { fetchKlineWithQuality, getUserDataKeys } from '@/lib/kline'
 import { avg } from '@/lib/math'
@@ -123,7 +123,7 @@ function usePrerequisites(userId: string | undefined): Prerequisites {
     void Promise.all([loadLLMConfig(userId), getUserDataKeys(userId)])
       .then(([config, dataKeys]) => {
         setHasModelConfig(Boolean(config?.api_key && config.model))
-        setHasDataKeys(Boolean(dataKeys.tickflow || dataKeys.tushare))
+        setHasDataKeys(Boolean(dataKeys.tushare) || true)
       })
       .finally(() => setCheckingConfig(false))
   }, [userId])
@@ -289,7 +289,6 @@ function SearchForm({
       </div>
       <p className="text-xs text-muted-foreground">
         {t('analysis.marketHint')}
-        <a href={TICKFLOW_PURCHASE} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">{t('common.tickflowLink')}</a>
       </p>
     </div>
   )
@@ -379,7 +378,7 @@ function KlineSection({ symbol, name, klineData, dataQuality, compact = false, o
 }
 
 function DataQualityBadge({ quality }: { quality: KlineDataQuality }) {
-  const source = quality.source === 'tickflow' ? 'TickFlow' : quality.source === 'tushare' ? 'Tushare' : quality.source === 'tencent' ? '腾讯' : quality.source === 'sina' ? '新浪' : quality.source === 'mixed' ? '多源' : '无来源'
+  const source = quality.source === 'tushare' ? 'Tushare' : quality.source === 'tencent' ? '腾讯' : quality.source === 'sina' ? '新浪' : quality.source === 'mixed' ? '多源' : '无来源'
   const coverage = quality.coverageStart && quality.coverageEnd ? `${quality.coverageStart} 至 ${quality.coverageEnd}` : '无覆盖区间'
   return (
     <span title={`来源：${source}；覆盖：${coverage}；最新交易日：${quality.latestTradingDate || '未知'}`} className={`rounded-full border px-2.5 py-1 text-xs ${quality.isComplete ? 'border-border text-muted-foreground' : 'border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200'}`}>
@@ -563,7 +562,7 @@ function buildKlinePayload(data: KlineRow[], quality: KlineDataQuality, contextP
 export const ANALYSIS_SYSTEM_PROMPT = `你是威科夫分析大师，主框架是量价与威科夫阶段判断。若用户提供价值面摘要，只把它作为质量、风险和仓位置信度校准：技术面负责时机，价值面负责是否值得提高/降低结论置信度。不要用基本面替代 K 线事实，也不要因为单个指标给出过度确定结论。
 
 【核心质量要求】
-- 必须在报告中说明数据来源（如 TickFlow / Tushare）、给出明确结论的置信度理由（如“置信度：80%，理由是...”），并提供明确的Plan B/策略失效位与风险提示。
+- 必须在报告中说明数据来源（如 Tushare / 腾讯 / 新浪）、给出明确结论的置信度理由（如“置信度：80%，理由是...”），并提供明确的Plan B/策略失效位与风险提示。
 - 严禁在结论中使用“必然”、“保证”、“无风险”、“稳赚”、“稳赢”、“包赚”等夸大或确定性的承诺词语。
 
 输出结构：

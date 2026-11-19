@@ -68,16 +68,15 @@ export {
   normalizeGeminiToolCalls,
 } from './gemini-sse-normalize'
 export {
-  TICKFLOW_PURCHASE,
   detectMarket,
   fetchValueSnapshotWithFetch,
   isCnSymbol,
   isSupportedKlineCode,
   isSupportedPortfolioCode,
-  isTickFlowMarketSymbol,
+  isNonCnMarketSymbol,
   normalizeCode,
   normalizePortfolioCode,
-  normalizeTickFlowSymbol,
+  normalizeMarketSymbol,
   normalizeTushareCode,
   normalizeReportDate,
   finiteNumber,
@@ -87,6 +86,15 @@ export {
   findFinancialRecord,
 } from './agent-market'
 export { refreshPortfolioTotalEquity, type PortfolioEquityRefresh } from './portfolio-valuation'
+export {
+  fetchServerIntraday,
+  fetchServerKline,
+  fetchServerQuotes,
+  resolveServerSymbol,
+  type MarketKind,
+  type ServerKlineRow,
+  type ServerQuote,
+} from './market-data'
 export type { FundamentalMetric, ValueSnapshot, ValueSnapshotReason } from './agent-market'
 export {
   formatMarketWatchContext,

@@ -80,7 +80,7 @@ function ContextPackLine({ pack }: { pack: NonNullable<AnalyzeStockResult['conte
 }
 
 function DataQualityLine({ quality }: { quality: KlineDataQuality }) {
-  const source = quality.source === 'tickflow' ? 'TickFlow' : quality.source === 'tushare' ? 'Tushare' : quality.source === 'tencent' ? '腾讯' : quality.source === 'sina' ? '新浪' : quality.source === 'mixed' ? '多源' : '无来源'
+  const source = quality.source === 'tushare' ? 'Tushare' : quality.source === 'tencent' ? '腾讯' : quality.source === 'sina' ? '新浪' : quality.source === 'mixed' ? '多源' : '无来源'
   const coverage = quality.coverageStart && quality.coverageEnd ? `${quality.coverageStart} 至 ${quality.coverageEnd}` : '无覆盖区间'
   return (
     <div className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border border-border/50 bg-muted/30 px-2 py-1.5 text-[11px] text-muted-foreground">

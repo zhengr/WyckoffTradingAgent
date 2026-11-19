@@ -9,7 +9,6 @@ from datetime import date
 
 import pandas as pd
 
-from integrations.tickflow_notice import TICKFLOW_UPGRADE_URL
 from utils.env import env_flag
 
 logger = logging.getLogger(__name__)
@@ -156,15 +155,11 @@ def _dash_date(value: str) -> str:
 
 
 def _index_failure_suffix() -> str:
-    has_tickflow = bool(os.getenv("TICKFLOW_API_KEY", "").strip())
     from integrations.tushare_client import has_tushare_token
 
-    has_tushare = has_tushare_token()
-    if not has_tickflow and not has_tushare:
-        return f"请配置数据源：{TICKFLOW_UPGRADE_URL}"
-    if has_tushare and not has_tickflow:
-        return f"Tushare 权限不足，可购买 TickFlow 获取更稳定数据：{TICKFLOW_UPGRADE_URL}"
-    return "请检查网络连通性。"
+    if not has_tushare_token():
+        return "请配置 TUSHARE_TOKEN，或检查网络连通性。"
+    return "Tushare 数据权限不足或网络异常，请检查数据权限与网络连通性。"
 
 
 def _debug_index_fail(source: str, err: Exception) -> None:

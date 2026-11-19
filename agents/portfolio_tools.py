@@ -1,13 +1,11 @@
 from __future__ import annotations
 
 import logging
-import os
 from datetime import date, timedelta
 from typing import Any
 
 from agents.stock_data_helpers import (
     code_to_name,
-    collect_tickflow_limit_hints_from_df,
     hist_metadata,
     latest_hist_date,
 )
@@ -452,9 +450,9 @@ def _portfolio_diagnosis(portfolio_id: str, state: dict, tool_context: ToolConte
         }
     end_date = cn_today()
     start_date = end_date - timedelta(days=500)
-    results, hints, success, failed = [], [], 0, 0
+    results, success, failed = [], 0, 0
     for position in state["positions"]:
-        diagnostic = _diagnose_position(position, start_date, end_date, hints)
+        diagnostic = _diagnose_position(position, start_date, end_date)
         results.append(diagnostic)
         if diagnostic.get("error"):
             failed += 1
@@ -479,8 +477,6 @@ def _portfolio_diagnosis(portfolio_id: str, state: dict, tool_context: ToolConte
         out["valuation_updated_at"] = state.get("updated_at", "")
     if failed:
         out["market_value_note"] = f"{failed} 只持仓行情缺失，总市值与仓位占比仅覆盖成功诊断的部分"
-    if hints:
-        out["tickflow_limit_hint"] = hints[0]
     return out
 
 
@@ -498,7 +494,7 @@ def _fill_position_weights(results: list[dict]) -> float:
 _EXTREME_DAY_CHANGE_PCT = -5.0  # 与 core.holding_diagnostic 的阈值保持一致，避免无谓拉取分时线
 
 
-def _diagnose_position(position: dict, start_date: date, end_date: date, hints: list[str]) -> dict:
+def _diagnose_position(position: dict, start_date: date, end_date: date) -> dict:
     from core.holding_diagnostic import diagnose_one_stock
     from integrations.stock_hist_repository import get_stock_hist, normalize_hist_df
 
@@ -511,7 +507,6 @@ def _diagnose_position(position: dict, start_date: date, end_date: date, hints: 
         if df is None or df.empty:
             return {"code": code, "name": name, "shares": shares, "error": "无行情数据"}
         metadata = hist_metadata(df)
-        _append_unique_hints(hints, collect_tickflow_limit_hints_from_df(df))
         normalized_df = normalize_hist_df(df)
         latest_date = latest_hist_date(df, "日期") or latest_hist_date(normalized_df)
         intraday_df = _fetch_intraday_if_extreme_day(code, normalized_df)
@@ -548,22 +543,13 @@ def _fetch_intraday_if_extreme_day(code: str, normalized_df) -> Any:
     if prev_close <= 0 or (latest_close / prev_close - 1.0) * 100.0 > _EXTREME_DAY_CHANGE_PCT:
         return None
 
-    api_key = os.getenv("TICKFLOW_API_KEY", "").strip()
-    if not api_key:
-        return None
     try:
-        from integrations.tickflow_client import TickFlowClient
+        from integrations.data_source_minute import fetch_intraday
 
-        return TickFlowClient(api_key=api_key).get_intraday(code, period="1m", count=500)
+        return fetch_intraday(code, period="1m", count=500)
     except Exception:
         logger.warning("failed to fetch intraday data for extreme-day diagnosis: %s", code, exc_info=True)
         return None
-
-
-def _append_unique_hints(target: list[str], hints: list[str]) -> None:
-    for hint in hints:
-        if hint not in target:
-            target.append(hint)
 
 
 def _diagnostic_payload(diagnostic, latest_date: str, metadata: dict, shares: int = 0) -> dict:

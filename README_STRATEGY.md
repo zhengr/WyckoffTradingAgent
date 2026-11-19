@@ -77,7 +77,7 @@ A 股主漏斗先写观察样本，盘后 feedback 再计算 outcomes，下一�
 
 ### 跨市场 universe
 
-A 股主漏斗使用本地股票池和行业映射；港股、美股、ETF 的代码 universe 维护在 `data/market_universes/*.txt`。港股名单是 Tushare `hk_basic` 的上市股票，美股名单是 Nasdaq Trader 上市正股目录（不含 ETF、权证、优先股和测试代码），名称在对应的 `*_names.json`。`hk_us_universe_refresh.yml` 每周日北京时间 21:30（cron `30 13 * * 0`，有意避开工作日港美漏斗）重新拉取这两份名单。脚本成功且有差异就直接提交 `main`；名单过短拒绝覆盖或无差异则跳过，不开 PR。港股 / 美股漏斗使用 TickFlow 批量日线接口拉取 320 个交易日窗口，和 A 股主流程共享结构识别口径，但不走 A 股专属的 Tushare 兜底。港美回测按需手动执行，不再维护独立定时 Actions。
+A 股主漏斗使用本地股票池和行业映射；港股、美股、ETF 的代码 universe 维护在 `data/market_universes/*.txt`。港股名单是 Tushare `hk_basic` 的上市股票，美股名单是 Nasdaq Trader 上市正股目录（不含 ETF、权证、优先股和测试代码），名称在对应的 `*_names.json`。`hk_us_universe_refresh.yml` 每周日北京时间 21:30（cron `30 13 * * 0`，有意避开工作日港美漏斗）重新拉取这两份名单。脚本成功且有差异就直接提交 `main`；名单过短拒绝覆盖或无差异则跳过，不开 PR。港股 / 美股漏斗通过统一行情仓库层拉取 320 个交易日窗口的日线（不走 A 股专属的 Tushare 适配器），和 A 股主流程共享结构识别口径。港美回测按需手动执行，不再维护独立定时 Actions。
 
 三市场推荐表与 Web 使用同一价格口径：`initial_price` 为该行入选日收盘（事件价），`change_pct` 相对该价；跨日再入选新增一行。同日重跑不得把已重定价的 `current_price` 盖回当日收盘，也不得把已算对的 `change_pct` 写死为 0。MFE/MAE 仍以各行事件日收盘为基准。港美漏斗写入时先读取既有事件报价，因此新记录无需等晚间重估后才与 A 股口径一致。
 
@@ -330,8 +330,7 @@ notify 产出 `exit_baseline_report.md/json`：每个策略 × 单元合并六�
 `below_random` / `indistinguishable`；两步判定与 reversal 相同（先对 random 分离，再看自身 CI 下沿 > 0），且预期信号
 应出现在 h30 / h60 单元而不是 h15。对照组按轮次换，报告按 run 矩阵里实际出现的对照判完整性。
 
-`--selection-strategy quality`（PIT 质量因子对照，#601）是第一个完全不读价格的选股源：快照 fetch 阶段用 TickFlow
-`get_financial_metrics(latest=False)` 写 `financial_history.json`（每只票逐季记录，带 `announce_date`，只保留回测起点前
+`--selection-strategy quality`（PIT 质量因子对照，#601）是第一个完全不读价格的选股源：快照 fetch 阶段通过行情仓库层的财务指标能力（历史季度，`announce_date` 语义不变）写 `financial_history.json`（每只票逐季记录，带 `announce_date`，只保留回测起点前
 400 日以后的记录与质量相关字段）。信号日 T 只用 `announce_date < T` 且不早于 T − 400 日的最新一条——公告当日不可用、
 次日起可用，不用 `period_end` 兜底。三项都有值才参与：ROE（`roe`，缺则 `roe_diluted`）高、资产负债率低、经营现金流 /
 营收高，各取当日参与票里的截面百分位，均值降序取 `top_n`。银行等没有现金流比口径的票天然不参与。无阈值寻优，

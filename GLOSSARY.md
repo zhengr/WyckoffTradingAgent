@@ -136,7 +136,7 @@
 | **squeeze_watch / policy_discovery** | 动态政策自迭代（`integrations/policy_discovery.py`，由 `FUNNEL_POLICY_DISCOVERY_ENABLED` 开关控制，默认关闭底层注入）：由 DeepSeek 解析实时政策快讯与热榜事件，热更新受白名单与词长校验的 `dynamic_aliases`、`boost_themes` 与 `squeeze_themes`；受敲打方向进入 `squeeze_watch` 与 `capital_migration.squeeze` 展示，不污染 `outflow` 候选扣分 |
 | **主题确认 vs 轮动提示** | `themes` 表示中长线持续性确认，可供主线引擎使用；`rotation_watch` 与 `cluster_watch` 分别表示短周期升温与同频抱团共振，两者不能替代中长线确认或直接打开市场总闸 |
 | **stock_role_score** | 股票在主题内的核心程度、相对强度和趋势位置得分 |
-| **quality_score** | 财务质量软评分，优先使用 TickFlow 可取到的 ROE、负债率、营收和利润趋势等字段 |
+| **quality_score** | 财务质量软评分，优先使用数据源可取到的 ROE、负债率、营收和利润趋势等字段（Tushare 为主，免费源降级） |
 | **timing_score** | 买点时机评分，检查 MA20/MA50、回踩不破、平台突破、缩量承接等 |
 | **主线买点候选** | 主线分、个股角色、质量和 timing 都过关，可进入 AI 复核；是否可买仍由市场总闸和跨日 confirmed 确认决定 |
 | **主线观察** | 主题和个股不错，但 timing 尚未满足，只跟踪不买 |
@@ -262,7 +262,7 @@ watch_score = 0.25 × q20 + 0.20 × q5 + 0.05 × q3
 | **OMS** | Order Management System | 订单管理系统。AI 建议不直接下单，执行权在 OMS 的风控引擎手中 |
 | **SLTP** | Stop Loss & Take Profit | 止损与止盈的组合退出机制 |
 | **NAV** | Net Asset Value | 账户净资产价值。OMS 根据 NAV 分配单次交易预算 |
-| **总权益缓存** | Total Equity Cache | `portfolios.total_equity`。持仓/现金写入后按 TickFlow 最新报价重新估值，港美股以 ECB 参考汇率折算人民币；行情不完整时保留旧值并显式告警，不以成本价冒充市值 |
+| **总权益缓存** | Total Equity Cache | `portfolios.total_equity`。持仓/现金写入后按最新可用行情报价重新估值，港美股以 ECB 参考汇率折算人民币；行情不完整时保留旧值并显式告警，不以成本价冒充市值 |
 | **盈亏比** | Risk/Reward Ratio | 预期收益与预期风险的比值。如止损 -7% / 止盈 +18% 的盈亏比为 2.57:1 |
 | **熔断** | Circuit Breaker | 当市场进入 CRASH 或盘前检测到极端风险（RISK_OFF / BLACK_SWAN）时，OMS 直接冻结买入权限 |
 | **Springboard ABC** | 右侧信号三项确认 | 对 SOS / EVR 和趋势候选的成交量、价格与支撑确认。普通弱确认至少 2/3，纯 SOS 正式候选要求 3/3 |
@@ -271,7 +271,7 @@ watch_score = 0.25 × q20 + 0.20 × q5 + 0.05 × q3
 | **DETECTED / SURVIVED / VALIDATED / OMS_APPROVED** | 候选状态链 | 依次表示当日结构命中、跨日未失效、需求已经确认、OMS 最终核准。库内 `confirmed` 是 `VALIDATED` 的兼容值；前两层不可下单 |
 | **ATR 止损放宽** | ATR Stop Relaxation | 持仓诊断中，根据波动率在上限内降低固定止损线，避免正常洗盘误杀；它只放宽、不收紧，也不取消硬止损 |
 | **可卖股数** | Sellable Shares | A 股 T+1 下当日实际能卖出的股数。持仓无分笔明细，买入日期等于当前交易日时整个仓位记为 0，EXIT/TRIM 与强制止损离场都会被拒并顺延到下一交易日。港股 / 美股为 T+0，同日买入仍可卖，不得套用 A 股冻结 |
-| **持仓代码** | Portfolio Symbol | 持仓账本 `portfolio_positions.code`：A 股 6 位数字、港股 `NNNNN.HK`、美股 `TICKER.US`（TickFlow 标准）。CLI/Web 写入前规范化；漏斗 OMS 买入空间仍以 A 股为主 |
+| **持仓代码** | Portfolio Symbol | 持仓账本 `portfolio_positions.code`：A 股 6 位数字、港股 `NNNNN.HK`、美股 `TICKER.US`（市场后缀代码）。CLI/Web 写入前规范化；漏斗 OMS 买入空间仍以 A 股为主 |
 | **仅止损降级工单** | Stop-only Fallback | LLM 不可用时追加 `HOLD / EXIT` 保护建议，不作废同日旧建议；旧买入建议可与新 `EXIT` 同时留档，不代表自动执行或跨轮冲突已解决。完整 LLM 流程全部持久化成功后仍替代同日旧建议。 |
 | **止损持久化失败** | Stop Persistence Failure | 读取组合失败、组合不存在或已匹配持仓更新零行均报失败；成功读取后不存在的新开仓持仓行可跳过。按规范化代码匹配、库内原始代码更新。Step4 作废本轮工单并恢复止损，回滚失败单独上报。 |
 | **OMS 整手** | OMS Lot Size | Step4 下单取整单位：A 股 100 股，港美 1 股。港美持仓进入 OMS 后不得再套用 A 股 100 股门槛，否则小仓位止损强制 EXIT 与止损落库会失效 |
@@ -288,7 +288,7 @@ watch_score = 0.25 × q20 + 0.20 × q5 + 0.05 × q3
 | 名词 | 含义 |
 |------|------|
 | **tushare** | 国内主流金融数据接口，提供 A 股日线行情、财务数据、指数数据等。有频率限制（500 次/分钟）和 IP 限制（最多 2 个） |
-| **标的池行情查询** | TickFlow GET `/v1/quotes?universes=CN_Equity_A`，全A一次取数后本地筛选；不等于逐股查询，也不等于完成尽调。补充代码用逗号分隔的 `symbols` 参数；历史日K默认每批200只（美股通道在 workflow 层压到100），分钟接口上限独立。 |
+| **标的池行情查询** | 全市场一次性取数后本地筛选（统一行情仓库层，优先 Tushare，失败降级 AkShare / 腾讯 / 新浪）；不等于逐股查询，也不等于完成尽调。历史日K批量并发默认每批200只（美股通道在 workflow 层压到100）。 |
 | **14:55 严格快照** | 独立深跌研究的只读首屏取数：禁代理单次全A GET，先校验覆盖、重复、空值与活跃成交时间，再在同一进程分页读取 ≤−7% 候选。401/403 不重试，旧缓存不能作为实时备用源。 |
 | **申万指数 (SW Index)** | 由申万宏源编制的行业指数，tushare 中通过 `sw_daily` 接口获取（注意不是 `index_daily`） |
 | **快照 (Snapshot)** | 将一次性拉取的全量股票数据序列化到本地文件（csv.gz），后续回测直接读快照而非再次请求网络，提升速度并避免 API 限制 |
@@ -417,7 +417,7 @@ flowchart LR
 | **deepseek_web_search / deepseek_web_fetch** | DeepSeek 独立 Search（`POST /v1/tools/search`）与 Fetch（`POST /v1/tools/fetch`）。有效星球会员的设置里有官方 `https://api.deepseek.com` 的 DeepSeek Key，且当前轮没有 Responses `web_search` 时，读盘室才注册这两个工具，供非 Responses 模型调用。代理域名上的 Key 和非会员不启用。Search 返回标题、链接、短摘要和长摘要（默认 5 条，工具最多 10 条，不取正文）；Fetch 把单个 http(s) URL 转成 Markdown，且只放行本次请求里 Search 返回的 URL。各约 5 元/千次成功请求，空结果、失败和超时不计费；账号级各 5 QPS。 |
 | **DeepSeek V4 思考策略** | 仅官方 DeepSeek V4 端点启用 `thinking` / `reasoning_effort`。读盘室主 Agent 使用 `high`，网页专项报告和后台结构化任务使用 `low`，读盘室嵌套 Chat 调用使用 `off`；TUI/桌面可在 `off/low/high/max` 中配置。无工具报告不会回传会被官方忽略的 `reasoning_content`：纯推理截断时提高预算重试，有正文时只按正文续写；工具型 Agent 才完整回传推理。 |
 | **browser_research（CLI）** | TUI/CLI 专用公开网页检索：Playwright 附着本机 Chrome CDP。CDP 未就绪时弹窗授权，同意后自动拉起独立调试 Chrome（`~/.wyckoff/chrome-cdp`），授权本会话有效；可用 `/browser start|status`。 |
-| **观察篮临时行情** | 读盘室按当前问题选取观察篮标的后拉取的 TickFlow 快照；浏览器缓存有效期为 45 秒，只作本轮模型上下文，不写入 Redis、持仓或信号表。 |
+| **观察篮临时行情** | 读盘室按当前问题选取观察篮标的后拉取的最新行情快照；浏览器缓存有效期为 45 秒，只作本轮模型上下文，不写入 Redis、持仓或信号表。 |
 | **Agent Run** | 一个按 Supabase 用户隔离的短期执行记录。当前只支持 `python_research`：提交后先返回 `queued`，由 Cloudflare Queue 消费并转为 `running`、`completed`、`failed` 或 `cancelled`；结果在 Redis 中自动过期。读盘室工具与 REST 端点复用同一记录。 |
 | **Agent Run 队列** | `wyckoff-agent-runs` 是单并发、单消息批次的 Cloudflare Queue 消费者。瞬时基础设施故障最多自动重试三次，之后转入 `wyckoff-agent-runs-dlq` 并把对应记录标为失败；Python 脚本非零退出是业务失败，不自动重跑。 |
 | **执行沙箱** | 执行 Agent 生成代码的临时 Vercel Sandbox。当前固定禁用外网与持久化，不注入业务密钥，结束后永久删除；读盘室仅在用户确认后执行，并再次校验星球会员身份、创建次数及累计 CPU 额度；Cloudflare Worker 只承担鉴权、编排和结果返回。 |

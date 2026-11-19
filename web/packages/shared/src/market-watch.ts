@@ -1,4 +1,5 @@
-import { normalizeCode, normalizeTickFlowSymbol } from './agent-market'
+import { normalizeCode } from './agent-market'
+import { resolveServerSymbol } from './market-data'
 
 export type MarketWatchState = 'ready' | 'unavailable' | 'empty'
 export const MARKET_WATCH_CACHE_TTL_MS = 45_000
@@ -15,7 +16,7 @@ export interface MarketWatchQuote {
 
 export interface MarketWatchSnapshot {
   state: MarketWatchState
-  source: 'tickflow' | 'none'
+  source: 'server' | 'none'
   requestedCodes: string[]
   quotes: MarketWatchQuote[]
   fetchedAt: string
@@ -29,7 +30,8 @@ export function normalizeMarketWatchCode(code: string): string {
 
 export function marketWatchSymbol(code: string): string {
   const normalized = normalizeMarketWatchCode(code)
-  return /^\d{6}$/.test(normalized) ? normalizeTickFlowSymbol(normalized) : normalized
+  const resolved = resolveServerSymbol(normalized)
+  return resolved ? resolved.symbol : normalized
 }
 
 export function selectMarketWatchCodes(
@@ -68,7 +70,7 @@ export function readFreshMarketWatchSnapshot(
   const expectedCodes = normalizeCodes(requestedCodes)
   const cachedCodes = normalizeCodes(Array.isArray(raw.requestedCodes) ? raw.requestedCodes.filter((code): code is string => typeof code === 'string') : [])
   if (expectedCodes.length === 0 || !sameCodes(expectedCodes, cachedCodes)) return null
-  if (raw.state !== 'ready' || raw.source !== 'tickflow' || typeof raw.fetchedAt !== 'string') return null
+  if (raw.state !== 'ready' || raw.source !== 'server' || typeof raw.fetchedAt !== 'string') return null
   const fetchedAtMs = Date.parse(raw.fetchedAt)
   if (!Number.isFinite(fetchedAtMs) || now - fetchedAtMs < -5_000 || now - fetchedAtMs > MARKET_WATCH_CACHE_TTL_MS) return null
   if (!Array.isArray(raw.quotes) || raw.quotes.length !== expectedCodes.length) return null
@@ -96,7 +98,7 @@ export function readFreshMarketWatchSnapshot(
   if (!sameCodes(expectedCodes, normalizedQuotes.map((quote) => quote.requestedCode))) return null
   return {
     state: 'ready',
-    source: 'tickflow',
+    source: 'server',
     requestedCodes: expectedCodes,
     quotes: normalizedQuotes,
     fetchedAt: raw.fetchedAt,
@@ -141,8 +143,8 @@ export function formatMarketWatchContext(snapshot: MarketWatchSnapshot, selected
   if (rows.length === 0) return ''
 
   return [
-    `## 观察篮临时行情（${snapshot.fromCache ? '来自浏览器缓存，仍在有效期内' : '刚从 TickFlow 更新'}，不写入数据库）`,
-    `行情来源：${snapshot.fromCache ? '浏览器本地缓存' : 'TickFlow'}；快照时间：${snapshot.fetchedAt}。这是最新可用行情，不一定是实时成交价。`,
+    `## 观察篮临时行情（${snapshot.fromCache ? '来自浏览器缓存，仍在有效期内' : '刚从服务端行情更新'}，不写入数据库）`,
+    `行情来源：${snapshot.fromCache ? '浏览器本地缓存' : '服务端行情代理'}；快照时间：${snapshot.fetchedAt}。这是最新可用行情，不一定是实时成交价。`,
     '以下是与用户当前问题相关的观察篮报价。只能引用返回的数字，不要把缺失值补成估算值。',
     '代码 | 最新价 | 涨跌幅 | 成交量 | 时间',
     ...rows,

@@ -13,54 +13,33 @@ def _df(closes: list[float]) -> pd.DataFrame:
 
 
 class TestFetchIntradayIfExtremeDay:
-    def test_mild_day_change_skips_fetch(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("TICKFLOW_API_KEY", "dummy-key")
+    def test_mild_day_change_skips_fetch(self) -> None:
         df = _df([10.0, 9.8])  # -2%, below the -5% threshold
-        result = portfolio_tools._fetch_intraday_if_extreme_day("600519", df)
-        assert result is None
+        assert portfolio_tools._fetch_intraday_if_extreme_day("600519", df) is None
 
-    def test_insufficient_history_skips_fetch(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("TICKFLOW_API_KEY", "dummy-key")
+    def test_insufficient_history_skips_fetch(self) -> None:
         df = _df([10.0])
         assert portfolio_tools._fetch_intraday_if_extreme_day("600519", df) is None
 
-    def test_missing_api_key_skips_fetch(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.delenv("TICKFLOW_API_KEY", raising=False)
-        df = _df([10.0, 9.0])  # -10%, exceeds threshold
-        result = portfolio_tools._fetch_intraday_if_extreme_day("600519", df)
-        assert result is None
-
-    def test_extreme_drop_with_api_key_fetches_intraday(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("TICKFLOW_API_KEY", "dummy-key")
+    def test_extreme_drop_fetches_intraday(self, monkeypatch: pytest.MonkeyPatch) -> None:
         sentinel = pd.DataFrame({"close": [9.0]})
+        calls = []
 
-        class _FakeClient:
-            def __init__(self, api_key: str) -> None:
-                assert api_key == "dummy-key"
+        def _fake_fetch(code: str, *, period: str, count: int) -> pd.DataFrame:
+            calls.append((code, period, count))
+            return sentinel
 
-            def get_intraday(self, code: str, *, period: str, count: int) -> pd.DataFrame:
-                assert code == "600519"
-                return sentinel
-
-        monkeypatch.setattr("integrations.tickflow_client.TickFlowClient", _FakeClient)
-        df = _df([10.0, 9.0])  # -10%, exceeds threshold
-        result = portfolio_tools._fetch_intraday_if_extreme_day("600519", df)
+        monkeypatch.setattr("integrations.data_source_minute.fetch_intraday", _fake_fetch)
+        result = portfolio_tools._fetch_intraday_if_extreme_day("600519", _df([10.0, 9.0]))
         assert result is sentinel
+        assert calls == [("600519", "1m", 500)]
 
-    def test_client_error_returns_none(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("TICKFLOW_API_KEY", "dummy-key")
+    def test_fetch_error_returns_none(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        def _raise(*_args, **_kwargs):
+            raise RuntimeError("boom")
 
-        class _RaisingClient:
-            def __init__(self, api_key: str) -> None:
-                pass
-
-            def get_intraday(self, *args, **kwargs):
-                raise RuntimeError("boom")
-
-        monkeypatch.setattr("integrations.tickflow_client.TickFlowClient", _RaisingClient)
-        df = _df([10.0, 9.0])
-        result = portfolio_tools._fetch_intraday_if_extreme_day("600519", df)
-        assert result is None
+        monkeypatch.setattr("integrations.data_source_minute.fetch_intraday", _raise)
+        assert portfolio_tools._fetch_intraday_if_extreme_day("600519", _df([10.0, 9.0])) is None
 
 
 class TestPortfolioViewStopLoss:

@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 from pathlib import Path
 from typing import Any
 
@@ -19,11 +18,16 @@ SEGMENTS = [("2017", "2019"), ("2020", "2022"), ("2023", "2024"), ("2025", "2026
 
 
 def load_etf(symbol: str, count: int = 2500) -> pd.DataFrame:
-    from integrations.tickflow_client import TickFlowClient
+    """日线历史走统一入口 fetch_stock_hist（tushare→akshare→…），取最近 count 根。"""
+    from datetime import timedelta
 
-    cli = TickFlowClient(api_key=os.getenv("TICKFLOW_API_KEY", ""))
-    df = cli.get_klines(symbol, period="1d", count=count)
-    return df[["date", "open", "close"]].copy()
+    from integrations.stock_hist_repository import get_stock_hist, normalize_hist_df
+    from utils.trading_clock import cn_today
+
+    end = cn_today()
+    start = end - timedelta(days=int(count * 2) + 30)
+    df = normalize_hist_df(get_stock_hist(symbol, start, end, adjust="qfq"))
+    return df.tail(count)[["date", "open", "close"]].copy()
 
 
 def run_timing(df: pd.DataFrame, ma_window: int, *, breaker: bool = False, dual: bool = False) -> dict[str, Any]:

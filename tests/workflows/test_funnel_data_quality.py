@@ -28,7 +28,7 @@ def test_data_quality_is_ready_when_all_required_coverages_pass() -> None:
 
     result = build_funnel_data_quality(
         symbols,
-        {"000001": _frame("tickflow"), "000002": _frame("tushare")},
+        {"000001": _frame("akshare"), "000002": _frame("tushare")},
         {"000001": 100.0, "000002": 80.0},
         {"000001": {"roe": 10}, "000002": {"roe": 8}},
         financial_requested=True,
@@ -37,8 +37,8 @@ def test_data_quality_is_ready_when_all_required_coverages_pass() -> None:
     assert result["status"] == "normal"
     assert result["trade_readiness"] == "ready"
     assert result["coverage"] == {"ohlcv": 1.0, "raw_ohlcv": 1.0, "market_cap": 1.0, "financial": 1.0}
-    assert result["ohlcv_source_counts"] == {"tickflow": 1, "tushare": 1}
-    assert result["ohlcv_source_ratios"] == {"tickflow": 0.5, "tushare": 0.5}
+    assert result["ohlcv_source_counts"] == {"akshare": 1, "tushare": 1}
+    assert result["ohlcv_source_ratios"] == {"akshare": 0.5, "tushare": 0.5}
 
 
 def test_data_quality_degrades_when_market_cap_coverage_is_below_95_percent() -> None:

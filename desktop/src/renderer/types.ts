@@ -133,7 +133,6 @@ export interface Settings {
   fallback_model: string
   stream_chunk_timeout_seconds: number
   tool_timeout_seconds: number
-  has_tickflow_key: boolean
   has_tushare_token: boolean
   desktop_appearance: 'system' | 'light' | 'dark'
   desktop_font_scale: number

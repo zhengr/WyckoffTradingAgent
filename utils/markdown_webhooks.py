@@ -4,12 +4,10 @@ from __future__ import annotations
 
 import requests
 
-from integrations.tickflow_notice import append_tickflow_limit_hint
 from utils.notification_capabilities import notification_capabilities, split_utf8_text
 
 
 def _markdown_body(title: str, content: str) -> str:
-    content = append_tickflow_limit_hint(content)
     return f"# {title}\n\n{content}" if title else content
 
 

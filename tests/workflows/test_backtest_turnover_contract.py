@@ -12,7 +12,7 @@ from core.wyckoff_engine import FunnelConfig, _evr_turnover_ok
 from workflows import backtest
 from workflows import backtest_turnover as turnover
 from workflows.backtest_data import load_snapshot_hist_map
-from workflows.backtest_snapshot_fetch import _frame_from_tickflow_batch
+from workflows.backtest_snapshot_fetch import _frame_from_batch
 
 
 def test_batch_missing_turnover_stays_missing_not_zero():
@@ -28,7 +28,7 @@ def test_batch_missing_turnover_stays_missing_not_zero():
             "amount": [10000],
         }
     )
-    frame, error = _frame_from_tickflow_batch("000001", raw, "2026-09-01", "2026-09-30")
+    frame, error = _frame_from_batch("000001", raw, "2026-09-01", "2026-09-30")
     assert error is None
     assert frame["turnover"].isna().all()
 

@@ -34,13 +34,13 @@ const translations: Partial<Record<TranslationKey, string>> = {
   'analysis.valueRiskProfitCashFlowDivergence': '净利润增长但经营现金流负',
   'analysis.valueRiskWeakCashEarnings': '利润现金含量偏弱',
   'analysis.valueUnsupported': '价值面快照先支持 A 股。',
-  'analysis.valueMissingSource': '需要 TickFlow 或 Tushare 数据源后展示价值面。',
+  'analysis.valueMissingSource': '需要配置 Tushare Token 后展示价值面。',
   'analysis.valueUnavailable': '暂无可用基本面数据。',
 }
 
 const t: Translate = (key) => translations[key] ?? key
 
-function snapshot(metrics: FundamentalMetric | null, source: ValueSnapshot['source'] = 'tickflow'): ValueSnapshot {
+function snapshot(metrics: FundamentalMetric | null, source: ValueSnapshot['source'] = 'tushare'): ValueSnapshot {
   return { symbol: '600519.SH', source, metrics, reason: metrics ? undefined : 'not-found' }
 }
 
@@ -79,10 +79,9 @@ describe('value analysis helpers', () => {
   })
 
   it('formats sources and unavailable reasons', () => {
-    expect(sourceLabel(snapshot(null, 'tickflow'))).toBe('TickFlow')
     expect(sourceLabel(snapshot(null, 'tushare'))).toBe('Tushare')
     expect(sourceLabel(snapshot(null, 'none'))).toBe('--')
-    expect(valueUnavailableText('missing-source', t)).toContain('TickFlow')
+    expect(valueUnavailableText('missing-source', t)).toContain('Tushare')
     expect(valueUnavailableText('unsupported-market', t)).toContain('A 股')
   })
 
@@ -113,7 +112,7 @@ describe('value analysis helpers', () => {
     const prompt = buildValuePrompt(snapshot(metrics))
     const digest = buildValueDigest(snapshot(metrics))
 
-    expect(prompt).toContain('价值面摘要（来源：TickFlow，报告期：2026-03-31）')
+    expect(prompt).toContain('价值面摘要（来源：Tushare，报告期：2026-03-31）')
     expect(prompt).toContain('ROE=18.20%')
     expect(prompt).toContain('数据质量：数据完整（6/6 核心字段')
     expect(prompt).toContain('EPS=12.34')

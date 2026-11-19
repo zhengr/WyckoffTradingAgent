@@ -68,7 +68,7 @@ from workflows.backtest_defaults import (
     FUNNEL_AI_SELECTION_MODE,
     full_formal_l4_max,
 )
-from workflows.backtest_intraday import tickflow_entry_price_fetcher_from_env
+from workflows.backtest_intraday import minute_entry_price_fetcher_from_env
 from workflows.backtest_strategy_variants import (
     normalize_strategy_variant,
     strategy_variant_entry_policy,
@@ -347,7 +347,7 @@ def _signal_policy_from_env() -> tuple[dict[str, float], dict[str, object], str]
 def _intraday_entry_price_fetcher(request: BacktestWorkflowRequest):
     if str(request.entry_price_mode or "open").strip().lower() != "tail_1455":
         return None
-    return tickflow_entry_price_fetcher_from_env()
+    return minute_entry_price_fetcher_from_env()
 
 
 def _load_prepared_data(

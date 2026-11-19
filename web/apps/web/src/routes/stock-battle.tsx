@@ -10,10 +10,10 @@ import { KlineChart } from '@/components/kline-chart'
 import { MultiStockChart, type ComparisonSeries } from '@/components/multi-stock-chart'
 import { UpgradeNotice } from '@/components/upgrade-notice'
 import { AIDisclaimer } from '@/components/ai-disclaimer'
-import { TICKFLOW_PURCHASE, fetchValueSnapshotWithFetch, isSupportedKlineCode } from '@wyckoff/shared'
+import { fetchValueSnapshotWithFetch, isSupportedKlineCode } from '@wyckoff/shared'
 import type { KlineRow, ValueSnapshot } from '@wyckoff/shared'
 import { formatSignedPercent } from '@/lib/format'
-import { fetchKlineViaTickFlow, getUserDataKeys } from '@/lib/kline'
+import { fetchKlineWithQuality, getUserDataKeys } from '@/lib/kline'
 import { avg } from '@/lib/math'
 import { saveAnalysisHistory } from '@/lib/local-history'
 import { resolveStockQuery } from '@/lib/market-search'
@@ -119,10 +119,9 @@ function useBattleRunner() {
       const [configs, keys, targets] = await Promise.all([loadLLMConfigCandidates(user.id), getUserDataKeys(user.id), resolveTargets(input)])
       if (configs.length === 0) throw new Error(t('battle.missingModel'))
       setModel(configs[0]?.model || 'unknown')
-      if (!keys.tickflow) throw new Error(upgradeMessage())
       const [fetched, bench] = await Promise.all([
-        fetchBattleStocks(targets, keys),
-        fetchKlineViaTickFlow('399300', keys.tickflow).catch(() => [] as KlineRow[]),
+        fetchBattleStocks(targets, keys, user.id),
+        fetchKlineWithQuality('399300', keys, user.id).then((r) => r.data).catch(() => [] as KlineRow[]),
       ])
       if (abort.signal.aborted) return
       setStocks(fetched)
@@ -504,13 +503,13 @@ async function resolveToken(token: string): Promise<BattleTarget | null> {
   return { code, name: resolved?.name || code }
 }
 
-async function fetchBattleStocks(targets: BattleTarget[], keys: { tickflow: string | null; tushare: string | null }): Promise<BattleStock[]> {
+async function fetchBattleStocks(targets: BattleTarget[], keys: { tushare: string | null }, userId: string): Promise<BattleStock[]> {
   const errors: string[] = []
   const stocks: BattleStock[] = []
   await Promise.all(
     targets.map(async (target) => {
       try {
-        const result = await fetchOneBattleStock(target, keys)
+        const result = await fetchOneBattleStock(target, keys, userId)
         if (result) stocks.push(result)
         else errors.push(`${target.code}: 无数据`)
       } catch (err) {
@@ -523,10 +522,9 @@ async function fetchBattleStocks(targets: BattleTarget[], keys: { tickflow: stri
   return stocks
 }
 
-async function fetchOneBattleStock(target: BattleTarget, keys: { tickflow: string | null; tushare: string | null }): Promise<BattleStock | null> {
-  if (!keys.tickflow) return null
+async function fetchOneBattleStock(target: BattleTarget, keys: { tushare: string | null }, userId: string): Promise<BattleStock | null> {
   const [data, valueSnapshot] = await Promise.all([
-    fetchKlineViaTickFlow(target.code, keys.tickflow),
+    fetchKlineWithQuality(target.code, keys, userId).then((r) => r.data),
     fetchValueSnapshotWithFetch(globalThis.fetch, target.code, keys).catch((): ValueSnapshot => ({ symbol: target.code, source: 'none', metrics: null, reason: 'not-found' })),
   ])
   if (data.length === 0) return null
@@ -582,12 +580,7 @@ function buildStockDigest(stock: BattleStock): string {
 }
 
 function normalizeBattleError(err: unknown): string {
-  const message = err instanceof Error ? err.message : String(err)
-  return message.includes(TICKFLOW_PURCHASE) ? upgradeMessage() : message
-}
-
-function upgradeMessage(): string {
-  return `触发数据源并发请求限制，请升级数据源：${TICKFLOW_PURCHASE}`
+  return err instanceof Error ? err.message : String(err)
 }
 
 function toComparisonSeries(stock: BattleStock): ComparisonSeries {

@@ -9,8 +9,40 @@ from typing import Any
 import pandas as pd
 
 from core.wyckoff_engine import normalize_hist_from_fetch
-from integrations.tickflow_client import TickFlowClient
+from integrations import data_source_hk_us as hkus
+from integrations.fetch_a_share_csv import resolve_trading_window
+from utils.trading_clock import resolve_end_calendar_day
 from workflows.market_funnel_runtime import RuntimeConfig
+
+
+def _window_from_count(count: int | None) -> tuple[str, str]:
+    """Translate a kline bar count into the date window the HK/US provider expects."""
+    end_day = resolve_end_calendar_day()
+    window = resolve_trading_window(end_day, max(int(count or 220), 30))
+    return window.start_trade_date.strftime("%Y%m%d"), window.end_trade_date.strftime("%Y%m%d")
+
+
+class _HkusMarketClient:
+    """Market-data client backed by :mod:`integrations.data_source_hk_us`.
+
+    The narrow ``get_quotes`` / ``get_klines*`` surface is kept so the funnel
+    data helpers remain injectable; no API key is required.
+    """
+
+    def get_quotes(self, symbols=None, *, universes=None):
+        return hkus.fetch_quote_map(list(symbols or []))
+
+    def get_klines_batch(self, symbols, *, period="1d", count=None, adjust="qfq", **_kwargs):
+        start_s, end_s = _window_from_count(count)
+        return hkus.fetch_histories_batch(list(symbols), start_s, end_s, adjust)
+
+    def get_klines(self, symbol, *, period="1d", count=None, adjust="qfq", **_kwargs):
+        start_s, end_s = _window_from_count(count)
+        return hkus.fetch_stock_hk_us(symbol, start_s, end_s, adjust)
+
+
+def default_client() -> _HkusMarketClient:
+    return _HkusMarketClient()
 
 
 def load_market_symbols(path: Path) -> list[str]:
@@ -23,12 +55,13 @@ def load_market_symbols(path: Path) -> list[str]:
 
 
 def fetch_market_inputs(
-    client: TickFlowClient,
+    client: Any | None,
     universe_symbols: list[str],
     runtime: RuntimeConfig,
 ) -> tuple[
     dict[str, dict[str, Any]], list[dict[str, Any]], pd.DataFrame | None, str, dict[str, pd.DataFrame], dict[str, Any]
 ]:
+    client = client or default_client()
     quotes = fetch_quotes(client, universe_symbols, runtime)
     ranked = rank_quotes(
         quotes,
@@ -63,10 +96,11 @@ def rank_quotes(
 
 
 def fetch_quotes(
-    client: TickFlowClient,
+    client: Any | None,
     symbols: list[str],
     runtime: RuntimeConfig,
 ) -> dict[str, dict[str, Any]]:
+    client = client or default_client()
     out: dict[str, dict[str, Any]] = {}
     batches = _chunks(symbols, runtime.quote_batch_size)
     for index, batch in enumerate(batches, start=1):
@@ -77,10 +111,11 @@ def fetch_quotes(
 
 
 def fetch_daily_histories(
-    client: TickFlowClient,
+    client: Any | None,
     symbols: list[str],
     runtime: RuntimeConfig,
 ) -> tuple[dict[str, pd.DataFrame], dict[str, Any]]:
+    client = client or default_client()
     started = time.monotonic()
     out: dict[str, pd.DataFrame] = {}
     batches = _chunks(symbols, runtime.kline_batch_size)
@@ -96,14 +131,15 @@ def fetch_daily_histories(
 BENCHMARK_MAX_GAP_DAYS = 21
 
 
-def fetch_benchmark_history(client: TickFlowClient, runtime: RuntimeConfig) -> tuple[pd.DataFrame | None, str]:
+def fetch_benchmark_history(client: Any | None, runtime: RuntimeConfig) -> tuple[pd.DataFrame | None, str]:
     """按候选顺序取第一份**连续**的基准。
 
-    只看行数会选中坏数据：TickFlow 的港股 ETF 自 2026-03-20 起停更，02800.HK 仍返回 320
+    只看行数会选中坏数据：港股 ETF 历史上出现过停更，02800.HK 仍返回 320
     行（历史 319 行 + 一根 2026-08-12 的孤立 K 线），行数检查完全通过，但中间缺 145 天。
     水温分类要在这份序列上算 MA50/MA200 与近 3 日累计涨幅，空洞会让 regime 静默失真。
     因此这里额外要求近端无长断层，并把跳过原因打出来。
     """
+    client = client or default_client()
     rejected: list[str] = []
     for symbol in runtime.benchmark_symbols:
         try:
@@ -241,7 +277,7 @@ def _merge_valid_histories(out: dict[str, pd.DataFrame], batch: dict[str, Any], 
             out[symbol] = norm
 
 
-def _fetch_one_benchmark_history(client: TickFlowClient, symbol: str, kline_count: int) -> pd.DataFrame | None:
+def _fetch_one_benchmark_history(client: Any | None, symbol: str, kline_count: int) -> pd.DataFrame | None:
     if hasattr(client, "get_klines"):
         raw = client.get_klines(symbol, period="1d", count=kline_count, adjust="forward")
     else:

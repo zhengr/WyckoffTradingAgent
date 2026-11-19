@@ -49,7 +49,7 @@ _EN_NEGATION = frozenset({"no", "n", "否"})
 TOOL_SCHEMAS: list[dict[str, Any]] = [
     {
         "name": "search_stock_by_name",
-        "description": "根据关键词搜索 A 股 / ETF / 美股 / 港股，支持名称、代码、常见中文别名和 TickFlow 标准代码。最多返回 10 条。",
+        "description": "根据关键词搜索 A 股 / ETF / 美股 / 港股，支持名称、代码、常见中文别名和市场后缀代码（如 600519.SH、AAPL.US）。最多返回 10 条。",
         "parameters": {
             "type": "object",
             "properties": {
@@ -63,7 +63,7 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
     },
     {
         "name": "analyze_stock",
-        "description": "分析单只股票：A 股/ETF 支持 6 位代码；美股/港股使用 TickFlow 标准代码。支持 Wyckoff 健康诊断、近期行情或基本面质量查询。",
+        "description": "分析单只股票：A 股/ETF 支持 6 位代码；美股/港股使用市场后缀代码（如 AAPL.US、0700.HK）。支持 Wyckoff 健康诊断、近期行情或基本面质量查询。",
         "parameters": {
             "type": "object",
             "properties": {
@@ -161,7 +161,7 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
                 },
                 "financial_metrics": {
                     "type": "boolean",
-                    "description": "可选。聊天快扫默认跳过 TickFlow 财务指标以提升速度；明确需要财务过滤/完整复核时传 true。",
+                    "description": "可选。聊天快扫默认跳过财务指标以提升速度；明确需要财务过滤/完整复核时传 true。",
                 },
             },
         },

@@ -7,7 +7,6 @@
 from __future__ import annotations
 
 import logging
-import os
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import date
@@ -19,20 +18,14 @@ import integrations.data_source_akshare
 import integrations.data_source_baostock
 import integrations.data_source_efinance
 import integrations.data_source_format
+import integrations.data_source_hk_us
 import integrations.data_source_sina
 import integrations.data_source_tencent
-import integrations.data_source_tickflow
 import integrations.data_source_tushare
 from integrations.index_data_source import fetch_index_akshare as fetch_index_akshare
 from integrations.index_data_source import fetch_index_hist as fetch_index_hist
 from integrations.spot_snapshot import fetch_stock_spot_snapshot as fetch_stock_spot_snapshot
 from integrations.spot_snapshot import load_spot_snapshot_map as load_spot_snapshot_map
-from integrations.tickflow_notice import (
-    TICKFLOW_LIMIT_HINT,
-    TICKFLOW_UPGRADE_URL,
-    is_tickflow_rate_limited_error,
-    record_tickflow_limit_event,
-)
 from utils.env import env_flag as _env_flag
 
 logger = logging.getLogger(__name__)
@@ -46,8 +39,6 @@ class StockHistFetchContext:
     end_s: str
     adjust: str
     failed_details: list[str] = field(default_factory=list)
-    tickflow_limit_notices: list[str] = field(default_factory=list)
-    tickflow_failed: bool = False
 
 
 def fetch_stock_hist(
@@ -71,7 +62,7 @@ def fetch_stock_hist(
 
 def _stock_fetchers() -> tuple[StockFetcher, ...]:
     return (
-        _try_tickflow,
+        _try_hk_us,
         _try_tushare,
         _try_akshare,
         _try_baostock,
@@ -81,18 +72,15 @@ def _stock_fetchers() -> tuple[StockFetcher, ...]:
     )
 
 
-def _try_tickflow(ctx: StockHistFetchContext) -> pd.DataFrame | None:
-    if _env_flag("DATA_SOURCE_DISABLE_TICKFLOW"):
-        ctx.failed_details.append("tickflow=disabled_by_env")
-        return None
-    if not os.getenv("TICKFLOW_API_KEY", "").strip():
-        ctx.failed_details.append("tickflow=unconfigured")
+def _try_hk_us(ctx: StockHistFetchContext) -> pd.DataFrame | None:
+    if not integrations.data_source_hk_us.is_hk_us_symbol(ctx.symbol):
         return None
     try:
-        df = integrations.data_source_tickflow.fetch_stock_tickflow(ctx.symbol, ctx.start_s, ctx.end_s, ctx.adjust)
-        return integrations.data_source_format.tag_source(df, "tickflow")
+        df = integrations.data_source_hk_us.fetch_stock_hk_us(ctx.symbol, ctx.start_s, ctx.end_s, ctx.adjust)
+        return integrations.data_source_format.tag_source(df, "tencent_hk_us")
     except Exception as exc:
-        _record_tickflow_failure(ctx, exc)
+        ctx.failed_details.append(f"tencent_hk_us={integrations.data_source_format.compact_error(exc)}")
+        _debug_source_fail("tencent_hk_us", exc)
         return None
 
 
@@ -179,38 +167,8 @@ def _try_sina(ctx: StockHistFetchContext) -> pd.DataFrame | None:
         return None
 
 
-def _record_tickflow_failure(ctx: StockHistFetchContext, exc: Exception) -> None:
-    ctx.tickflow_failed = True
-    detail = integrations.data_source_format.compact_error(exc)
-    ctx.failed_details.append(f"tickflow={detail}")
-    _debug_source_fail("tickflow", exc)
-    if not is_tickflow_rate_limited_error(exc):
-        logger.info(
-            "tickflow failed, falling back: symbol=%s, range=%s..%s, err=%s", ctx.symbol, ctx.start_s, ctx.end_s, detail
-        )
-        return
-    record_tickflow_limit_event(exc)
-    ctx.tickflow_limit_notices.append(TICKFLOW_LIMIT_HINT)
-    ctx.failed_details.append(f"tickflow_limit_hint={TICKFLOW_LIMIT_HINT}")
-    logger.warning(
-        "tickflow rate limited: symbol=%s, range=%s..%s, fallback_chain=tushare->akshare->baostock->efinance->tencent->sina",
-        ctx.symbol,
-        ctx.start_s,
-        ctx.end_s,
-    )
-
-
 def _fallback_output(ctx: StockHistFetchContext, df: pd.DataFrame, source: str) -> pd.DataFrame:
-    out = integrations.data_source_tickflow.attach_tickflow_limit_notices(df, ctx.tickflow_limit_notices)
-    out = integrations.data_source_format.tag_source(out, source)
-    if ctx.tickflow_failed:
-        logger.info(
-            "fallback hit: symbol=%s, source=%s, tickflow_limit_hint=%s",
-            ctx.symbol,
-            source,
-            bool(ctx.tickflow_limit_notices),
-        )
-    return out
+    return integrations.data_source_format.tag_source(df, source)
 
 
 def _stock_hist_failure(ctx: StockHistFetchContext) -> RuntimeError:
@@ -218,21 +176,17 @@ def _stock_hist_failure(ctx: StockHistFetchContext) -> RuntimeError:
     hint_suffix = _build_datasource_hint(ctx.failed_details)
     return RuntimeError(
         f"数据拉取全线失败 [标:{ctx.symbol}, 范围:{ctx.start_s}..{ctx.end_s}, 复权:{ctx.adjust}]：已按顺序尝试 "
-        f"tickflow→tushare→akshare→baostock→efinance→tencent→sina，均无可用 K 线数据。请检查该标的是否已退市或处于长期停牌期。"
+        f"tushare→akshare→baostock→efinance→tencent→sina，均无可用 K 线数据。请检查该标的是否已退市或处于长期停牌期。"
         f"{detail_suffix}{hint_suffix}"
     )
 
 
 def _build_datasource_hint(failed_details: list[str]) -> str:
     hint = _network_hint_from_details(failed_details)
-    has_tickflow = bool(os.getenv("TICKFLOW_API_KEY", "").strip())
     from integrations.tushare_client import has_tushare_token
 
-    has_tushare = has_tushare_token()
-    if not has_tickflow and not has_tushare:
-        return f" 请配置数据源：{TICKFLOW_UPGRADE_URL}"
-    if has_tushare and not has_tickflow:
-        return f" Tushare 数据权限不足，可购买 TickFlow 获取更稳定的数据源：{TICKFLOW_UPGRADE_URL}"
+    if not has_tushare_token():
+        return " 请配置 TUSHARE_TOKEN（或检查 akshare/腾讯等免费源的 Network/DNS 设置）。"
     return f" 诊断提示：{hint}" if hint else ""
 
 

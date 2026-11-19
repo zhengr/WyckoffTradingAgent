@@ -10,7 +10,7 @@ from workflows.backtest_snapshot_fetch_hk_us import run_snapshot_fetch
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Fetch HK backtest data snapshot from TickFlow.")
+    parser = argparse.ArgumentParser(description="Fetch HK backtest data snapshot.")
     parser.add_argument("--start", required=True)
     parser.add_argument("--end", required=True)
     parser.add_argument("--trading-days", type=int, default=320)

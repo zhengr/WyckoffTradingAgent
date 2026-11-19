@@ -10,7 +10,6 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-import os
 import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -418,10 +417,7 @@ def refresh_portfolio_total_equity(
             return EquityRefreshResult(False, None, f"未找到组合 {portfolio_id}")
         positions = list(state.get("positions") or [])
         if positions:
-            api_key = portfolio_tickflow_key(portfolio_id, client)
-            if not api_key:
-                return EquityRefreshResult(False, None, "未配置 TickFlow API Key")
-            prices, rates = load_portfolio_marks(positions, api_key)
+            prices, rates = load_portfolio_marks(positions)
         else:
             prices, rates = {}, {"CNY": 1.0}
         valuation = calculate_portfolio_valuation(float(state.get("free_cash", 0.0) or 0.0), positions, prices, rates)
@@ -431,16 +427,6 @@ def refresh_portfolio_total_equity(
     except Exception as exc:
         logger.warning("[supabase_portfolio] refresh total_equity failed: %s", exc)
         return EquityRefreshResult(False, None, str(exc))
-
-
-def portfolio_tickflow_key(portfolio_id: str, client: Client) -> str:
-    fallback = os.getenv("TICKFLOW_API_KEY", "").strip()
-    prefix, separator, user_id = str(portfolio_id or "").partition(":")
-    if prefix != "USER_LIVE" or not separator or not user_id:
-        return fallback
-    response = client.table(TABLE_USER_SETTINGS).select("tickflow_api_key").eq("user_id", user_id).limit(1).execute()
-    rows = response.data or []
-    return str(rows[0].get("tickflow_api_key", "") or "").strip() if rows else fallback
 
 
 def _mutation_message(message: str, portfolio_id: str, client: Client, refresh_equity: bool) -> str:

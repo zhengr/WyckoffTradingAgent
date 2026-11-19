@@ -25,9 +25,9 @@
 
 独立午间研究以本次直接查询的线上 `USER_LIVE:<user_id>` 原表值为准。持仓、股数、成本、止损、现金及 state signature 的正常变化，以及 `updated_at` 未同步、滞后或缺失，仅作非阻断审计提示，不要求与历史一致，也不因此中止研究。必要时复查一次并采用最后成功读取的当前值。只有身份/项目不匹配、查询失败、组合缺失或必需数值不可用时，局部停用受影响的持仓动作计算；独立市场与消息研究继续。此规则不授权修改账户或放宽行情、原文尽调门槛。
 
-- 实时报价使用 GET `/v1/quotes`，`universes=CN_Equity_A` 整池取数后本地筛选，不逐股拉全A。`symbols` 与 `universes` 均为逗号分隔查询参数。厂商同时接受 POST JSON（2026-09-04 实测两种写法返回字段一致），统一走 GET 是为了跟客户端其余批量接口同源，不是因为 POST 不可用。
+- 实时报价优先走主数据源（Tushare）的整池/批量查询，整池取数后本地筛选，不逐股拉全A；补充代码走逗号分隔的批量参数。
 - 指数及市场池未覆盖的持仓各合并批量查询；同一次研究复用已核验的上午快照，不能跨日复用或混入午后价格。
-- 历史日K使用 `get_klines_batch`，默认每批200只；美股通道在 `wyckoff_funnel_us.yml` 里单独压到100，那是该通道的选择，不是厂商限制。上午分钟线使用独立的 `/v1/klines/intraday/batch`，按该接口自己的限制分块。
+- 历史日K走统一仓库层的批量拉取，默认每批200只；美股通道在 `wyckoff_funnel_us.yml` 里单独压到100，那是该通道的选择，不是数据源限制。盘中分钟线按所用源自己的批量接口分块拉取。
 - 批量失败必须披露请求数、错误、成功/缺失覆盖；禁止对整个市场逐股兜底。传输完成不等于原文尽调完成，未完成不得输出可执行换仓。
 
 ### 14:55 独立深跌研究的首屏快照
@@ -35,14 +35,13 @@
 定时任务首个行情动作在仓库实际目录 `/Users/youngcan/stock/WyckoffTradingAgent` 执行
 `.venv/bin/python -m scripts.a_share_1455_quote_snapshot --interactive`，终端启用 TTY 并以
 `yield_time_ms=1000` 尽快取首条输出；每个终端调用都显式指定该目录，
-不能继承历史 worktree 的工作目录。脚本只从环境或本地配置取 API key，基址固定为
-`https://api.tickflow.org`；独立 HTTP 会话禁用环境代理，仅一次 GET `universes=CN_Equity_A`，
+不能继承历史 worktree 的工作目录。脚本只从环境或本地配置取数据源凭据；独立 HTTP 会话禁用环境代理，仅一次整池快照请求，
 不拆成逐股/分批请求，也不写行情文件或数据库。首条 JSON 仅给不足 10 KB 的计数与最多 20 只候选；
 其中 `candidate_count` 只是价格/昨收的预筛数量，不是完成除权校正的真实 ≤−7% 池。须逐只核对
 分红、送转、拆并股与交易所除权参考价后，才可确立最终入口池及 A/B/Reject 数量；
 同一进程保留完整候选池，向终端发送 `page 1`、`page 2` 等命令分页读取其余候选，完成后发送 `quit`。
 
-HTTP 401/403 当次即停，记录状态、CF-RAY、服务器时间与安全错误码，不重试且不输出响应正文或密钥；
+HTTP 401/403 当次即停，记录状态、服务器时间与安全错误码，不重试且不输出响应正文或密钥；
 若首条输出为空但本地进程退出 0，应按输出采集故障诊断，不能称为厂商故障。覆盖不足、重复代码、
 空行情过多、核心活跃报价过期时不得把零候选当作市场结论。报价自带的 `timestamp` 是最近成交时间，
 单只候选超过 60 秒或供应商涨跌幅与价格/昨收计算不符时必须复核，复核前不得进入可买类。
@@ -226,7 +225,7 @@ LPS、确认状态或候选血缘发生语义变更时，先做 dry-run，检查
 
 实际范围应包含规则上线后受影响的全部交易日。`--apply` 会替换对应日期的 `recommendation_tracking`、`signal_pending` 和 `signal_observations`；删除 observation 会级联删除对应 outcome，因此应用后必须重跑 `scripts/signal_feedback_job.py`，再核对 `signal_health_daily` 与 `signal_registry`，不能只回刷推荐表。
 
-回刷会强制要求历史市值、沪指/小盘双基准完整，并在 TickFlow 任一批次最终失败时中止，不允许用降级数据覆盖生产表。指数和历史市值默认各重试 3 次，可通过 `INDEX_DATA_MAX_RETRIES`、`INDEX_DATA_RETRY_BACKOFF_SECONDS`、`MARKET_METADATA_MAX_RETRIES`、`MARKET_METADATA_RETRY_BACKOFF_SECONDS` 调整；维护任务还可提高 `TICKFLOW_MAX_RETRIES`。这些参数只改变容错，不改变策略口径。
+回刷会强制要求历史市值、沪指/小盘双基准完整，并在行情数据源任一批次最终失败时中止，不允许用降级数据覆盖生产表。指数和历史市值默认各重试 3 次，可通过 `INDEX_DATA_MAX_RETRIES`、`INDEX_DATA_RETRY_BACKOFF_SECONDS`、`MARKET_METADATA_MAX_RETRIES`、`MARKET_METADATA_RETRY_BACKOFF_SECONDS` 调整；维护任务还可提高数据源重试次数（如 `FUNNEL_FETCH_RETRIES`）。这些参数只改变容错，不改变策略口径。
 
 上面提到的重跑 `scripts/signal_feedback_job.py` 有同族的一对：`SIGNAL_FEEDBACK_MAX_RETRIES`（默认 3）和 `SIGNAL_FEEDBACK_RETRY_BACKOFF_SECONDS`（默认 1），管的是分页拉取 `signal_outcomes` 时的瞬时故障——单页一个 504 就会让整轮抛 `failed to load signal outcomes`，2026-09-12 即如此。同样只改容错不改口径；若持续失败是 Supabase 侧不可用，调大次数没有意义。
 

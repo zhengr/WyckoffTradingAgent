@@ -81,7 +81,7 @@ def test_short_series_still_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_fetch_exception_falls_through(monkeypatch: pytest.MonkeyPatch) -> None:
-    _patch(monkeypatch, {"02800.HK": RuntimeError("tickflow down"), "00939.HK": _continuous()})
+    _patch(monkeypatch, {"02800.HK": RuntimeError("provider down"), "00939.HK": _continuous()})
 
     _df, symbol = mfd.fetch_benchmark_history(None, _Runtime(("02800.HK", "00939.HK")))
 

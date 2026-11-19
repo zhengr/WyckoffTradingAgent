@@ -45,7 +45,7 @@ def test_load_symbol_context_returns_light_context_for_non_cn(monkeypatch):
     assert context.bench_df is None
 
 
-def test_load_rps_universe_histories_normalizes_tickflow_batches(monkeypatch):
+def test_load_rps_universe_histories_normalizes_per_symbol_bars(monkeypatch):
     raw = pd.DataFrame(
         {
             "date": pd.date_range("2026-01-01", periods=3, freq="D").strftime("%Y-%m-%d"),
@@ -56,14 +56,7 @@ def test_load_rps_universe_histories_normalizes_tickflow_batches(monkeypatch):
         }
     )
 
-    class Client:
-        def __init__(self, api_key: str):
-            self.api_key = api_key
-
-        def get_klines_batch(self, symbols, **_kwargs):
-            return {symbol: raw for symbol in symbols}
-
-    monkeypatch.setattr(data, "TickFlowClient", Client)
+    monkeypatch.setattr(data, "fetch_stock_hist", lambda *args, **kwargs: raw)
     monkeypatch.setattr(data, "get_stocks_by_board", lambda _board: [{"code": "000001"}, {"code": "000002"}])
 
     result = data.load_rps_universe_histories(Spec("cn", "000001", "A股"), date(2026, 1, 1), date(2026, 1, 3), 2)

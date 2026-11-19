@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { arrayToCSV, buildEnhancedRows, exportSymbolFromStock, parseExportSymbols, parseTickFlowToRows } from '../export-data'
+import { arrayToCSV, buildEnhancedRows, exportSymbolFromStock, parseExportSymbols, parseKlineToRows } from '../export-data'
 
 describe('export-data', () => {
-  it('maps search hits to TickFlow export symbols', () => {
+  it('maps search hits to export symbols', () => {
     expect(exportSymbolFromStock({ symbol: '603296.SH', analysisCode: '603296' })).toBe('603296.SH')
     expect(exportSymbolFromStock({ analysisCode: '000001' })).toBe('000001.SZ')
     expect(exportSymbolFromStock({ symbol: 'AAPL.US', analysisCode: 'AAPL.US' })).toBe('AAPL.US')
@@ -19,18 +19,11 @@ describe('export-data', () => {
     ])
   })
 
-  it('parses TickFlow table payloads into export rows', () => {
-    const rows = parseTickFlowToRows({
-      data: {
-        '601318.SH': {
-          timestamp: [1779033600000],
-          open: [10],
-          high: [11],
-          low: [9],
-          close: [10.5],
-          volume: [1000],
-        },
-      },
+  it('maps /api/kline rows into export rows', () => {
+    const rows = parseKlineToRows({
+      data: [
+        { date: '2026-05-18', open: 10, high: 11, low: 9, close: 10.5, volume: 1000 },
+      ],
     })
 
     expect(rows).toEqual([
@@ -38,18 +31,12 @@ describe('export-data', () => {
     ])
   })
 
-  it('normalizes TickFlow second timestamps and compact trade dates', () => {
-    const rows = parseTickFlowToRows({
-      data: {
-        '603039.SH': {
-          timestamp: [1704067200, '20240621'],
-          open: [10, 11],
-          high: [11, 12],
-          low: [9, 10],
-          close: [10.5, 11.5],
-          volume: [1000, 1200],
-        },
-      },
+  it('normalizes compact trade dates from /api/kline rows', () => {
+    const rows = parseKlineToRows({
+      data: [
+        { date: '20240101', open: 10, high: 11, low: 9, close: 10.5, volume: 1000 },
+        { date: '20240621', open: 11, high: 12, low: 10, close: 11.5, volume: 1200 },
+      ],
     })
 
     expect(rows.map((row) => row.date)).toEqual(['2024-01-01', '2024-06-21'])

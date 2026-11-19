@@ -41,7 +41,6 @@ export const ALLOWED_PROXY_TARGET_ORIGINS = [
   'https://api.deepseek.com',
   'https://api.anthropic.com',
   'https://token-plan-sgp.xiaomimimo.com',
-  'https://api.tickflow.org',
   'https://api.tushare.pro',
   'https://ark.cn-beijing.volces.com',
 ] as const

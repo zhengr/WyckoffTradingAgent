@@ -1,7 +1,7 @@
-"""Phase 1: HK/US 回测数据快照抓取（TickFlow 数据源）。
+"""Phase 1: HK/US 回测数据快照抓取（腾讯港股/美股 provider）。
 
-港股基准候选列表带回退（TickFlow 不支持任何形式的恒生指数代码，改用
-02800.HK/03033.HK 等 ETF 代理），美股基准固定为 SPY.US 单一候选；两者共用
+港股基准候选列表带回退（恒生指数本身无可交易行情，改用 02800.HK/03033.HK
+等 ETF 代理），美股基准固定为 SPY.US 单一候选；两者共用
 同一套批量抓取/落盘流程，差异集中在 MarketSnapshotConfig。A股快照抓取走
 完全不同的 akshare 数据源与元数据管线，见 workflows/backtest_snapshot_fetch.py。
 """
@@ -15,15 +15,28 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 import pandas as pd
 
 from core.wyckoff_engine import normalize_hist_from_fetch
+from integrations import data_source_hk_us as hkus
 from integrations.market_universe import load_hk_symbols, load_us_symbols
-from integrations.tickflow_client import TickFlowClient
 
 Market = Literal["hk", "us"]
+
+
+class _HkusKlineClient:
+    """Adapts the HK/US daily provider to the batch-kline interface used below.
+
+    Kept injectable so benchmark/fetch helpers stay trivially testable; the
+    production path passes no client and uses this adapter.
+    """
+
+    def get_klines_batch(self, symbols, *, period, count, start_time_ms, end_time_ms, adjust):
+        start_s = datetime.fromtimestamp(start_time_ms / 1000).strftime("%Y%m%d")
+        end_s = datetime.fromtimestamp(end_time_ms / 1000).strftime("%Y%m%d")
+        return hkus.fetch_histories_batch(list(symbols), start_s, end_s, "qfq")
 
 
 @dataclass(frozen=True)
@@ -36,8 +49,8 @@ class MarketSnapshotConfig:
 
 
 def _hk_benchmark_candidates() -> tuple[str, ...]:
-    # 实测 TickFlow 不支持任何形式的恒生指数代码（800000.HK/HSI.HK/^HSI/HSI 均返回空），
-    # 改用 02800.HK（盈富基金 Tracker Fund，追踪恒生指数的港股 ETF）作为基准代理，
+    # 恒生指数本身没有可交易行情，改用 02800.HK（盈富基金 Tracker Fund，追踪恒指
+    # 的港股 ETF）作为基准代理，
     # 历史数据完整覆盖 2020 年至今；03033.HK（南方恒生科技）作为科技股行情的备选代理。
     default = ("02800.HK", "03033.HK")
     return tuple(s.strip() for s in os.getenv("BACKTEST_HK_BENCHMARK", "").split(",") if s.strip()) or default
@@ -63,7 +76,7 @@ def _market_config(market: Market) -> MarketSnapshotConfig:
 
 
 def _fetch_klines_batched(
-    client: TickFlowClient,
+    client: Any | None,
     symbols: list[str],
     count: int,
     start_ms: int,
@@ -83,7 +96,7 @@ def _fetch_klines_batched(
                 count=count,
                 start_time_ms=start_ms,
                 end_time_ms=end_ms,
-                adjust="forward",
+                adjust="qfq",
             )
             all_dfs.update(batch)
         except Exception as e:
@@ -97,14 +110,14 @@ def _fetch_klines_batched(
 
 
 def _fetch_benchmark(
-    client: TickFlowClient, count: int, start_ms: int, end_ms: int, config: MarketSnapshotConfig
+    client: Any | None, count: int, start_ms: int, end_ms: int, config: MarketSnapshotConfig
 ) -> tuple[pd.DataFrame | None, str]:
     tag = f"[{config.market}-snapshot]"
     for symbol in config.benchmark_candidates:
         print(f"{tag} fetching benchmark: {symbol}")
         try:
             bench_map = client.get_klines_batch(
-                [symbol], period="1d", count=count, start_time_ms=start_ms, end_time_ms=end_ms, adjust="forward"
+                [symbol], period="1d", count=count, start_time_ms=start_ms, end_time_ms=end_ms, adjust="qfq"
             )
             raw = bench_map.get(symbol)
             norm = normalize_hist_from_fetch(raw) if raw is not None and not raw.empty else None
@@ -158,11 +171,7 @@ def _save_snapshot(
 def run_snapshot_fetch(args, *, market: Market) -> int:
     config = _market_config(market)
     tag = f"[{market}-snapshot]"
-    api_key = os.getenv("TICKFLOW_API_KEY", "").strip()
-    if not api_key:
-        print(f"{tag} ERROR: TICKFLOW_API_KEY not set")
-        return 1
-    client = TickFlowClient(api_key=api_key)
+    client = _HkusKlineClient()
     start_dt = datetime.strptime(args.start, "%Y-%m-%d").date()
     end_dt = datetime.strptime(args.end, "%Y-%m-%d").date()
     prefetch_start = start_dt - timedelta(days=int(args.trading_days * 2))

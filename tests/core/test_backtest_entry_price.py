@@ -186,7 +186,7 @@ def test_tail_1455_uses_injected_intraday_fetcher() -> None:
     df = pd.DataFrame({"date": [day], "open": [10.0], "high": [10.8], "low": [9.8], "close": [10.5]})
 
     def fetcher(_code, _day, entry_time, _cache):
-        return 10.2, f"tickflow_1m_{entry_time}"
+        return 10.2, f"minute_1m_{entry_time}"
 
     price, entry_date, source = entry_on_or_after(
         df,
@@ -201,7 +201,7 @@ def test_tail_1455_uses_injected_intraday_fetcher() -> None:
 
     assert price == 10.2
     assert entry_date == day
-    assert source == "tickflow_1m_14:55"
+    assert source == "minute_1m_14:55"
 
 
 def test_calc_trade_excursion_uses_window_high_low() -> None:

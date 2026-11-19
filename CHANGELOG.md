@@ -2,8 +2,11 @@
 
 ## Unreleased
 
+### 变更
+- **移除 TickFlow 数据源**：CI workflow 的 `TICKFLOW_*` 环境变量、`.env.example` / `.claude.example.json` 配置项、CLI / TUI / 桌面端的 TickFlow Key 配置入口，以及文档中的 TickFlow 数据源描述与推广链接全部清除；行情统一走 Tushare，未配置或权限不足时依次降级到 AkShare / Baostock / efinance / 腾讯 / 新浪。数据质量合同阈值（OHLCV/市值 ≥95%、财务 ≥90%、`date_keyed_native_pct_v1`）不受影响。
+
 ### 改进
-- **星球会员硬切与权限解耦**：Web、Worker、TUI 和数据库统一使用 `planet_members` 语义；会员身份不再代替个人 TickFlow/Tushare 或模型配置，单股分析只在真实行情 Key 就绪后开放；前后端到期日统一按 `Asia/Shanghai` 自然日判断。
+- **星球会员硬切与权限解耦**：Web、Worker、TUI 和数据库统一使用 `planet_members` 语义；会员身份不再代替个人数据源（Tushare 等）或模型配置，单股分析只在真实行情 Key 就绪后开放；前后端到期日统一按 `Asia/Shanghai` 自然日判断。
 - **DeepSeek V4 全链路适配**：官方 Flash/Pro 统一支持 1M 上下文、`off/low/high/max` 思考强度和 Responses 联网搜索；旧 `deepseek-chat` / `deepseek-reasoner` 配置在官方端点按原思考语义迁移，代理端点保持普通兼容协议。网页专项报告、读盘室、后台任务、TUI 与桌面打包使用各自明确的完整输出策略。
 
 ### 修复

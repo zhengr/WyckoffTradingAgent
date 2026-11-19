@@ -153,7 +153,7 @@ def process_hist_chunk(chunk: pd.DataFrame, symbols_filter: set[str] | None, out
 def _hist_columns(snapshot_dir: Path) -> list[str]:
     """只有带日期键换手合同的快照才读 turnover。
 
-    无合同的快照里 TickFlow 批量行没有换手、单票回退行有真实换手，读进来只有后者
+    无合同的快照里批量行没有换手、单票回退行有真实换手，读进来只有后者
     受 EVR 换手下限约束，同一次回放里两种口径混用。没合同就整列不读，保持默认基线。
     """
     if (load_snapshot_pit_meta(snapshot_dir).get("turnover_pit") or {}).get("contract") == TURNOVER_CONTRACT:

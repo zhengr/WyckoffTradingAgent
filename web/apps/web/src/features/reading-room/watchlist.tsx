@@ -147,7 +147,7 @@ function MarketWatchSummary({ snapshot }: { snapshot: MarketWatchSnapshot }) {
         <span className="font-medium">临时行情 · {snapshot.state === 'ready' ? `${readyCount}/${snapshot.requestedCodes.length} 个已更新` : '暂不可用'}</span>
         <span className="text-[11px] opacity-75">{formatWatchTime(snapshot.fetchedAt)}</span>
       </div>
-      <p className="mt-1 opacity-80">{snapshot.state === 'ready' ? `${snapshot.fromCache ? '命中浏览器缓存' : '刚从 TickFlow 更新'}，本轮已带入模型，不写入数据库。` : snapshot.message || '发起一次读盘后刷新。'}</p>
+      <p className="mt-1 opacity-80">{snapshot.state === 'ready' ? `${snapshot.fromCache ? '命中浏览器缓存' : '刚从服务端行情更新'}，本轮已带入模型，不写入数据库。` : snapshot.message || '发起一次读盘后刷新。'}</p>
     </div>
   )
 }

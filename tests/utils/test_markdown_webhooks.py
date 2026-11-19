@@ -12,7 +12,6 @@ class _Response:
 
 def test_dingtalk_webhook_splits_oversized_utf8_message(monkeypatch):
     payloads = []
-    monkeypatch.setattr(markdown_webhooks, "append_tickflow_limit_hint", lambda value: value)
     monkeypatch.setattr(
         markdown_webhooks.requests,
         "post",

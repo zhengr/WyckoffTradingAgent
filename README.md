@@ -18,9 +18,9 @@
 
 用自然语言和一位威科夫大师对话。系统把 A 股日线行情、威科夫结构识别、AI 研报、持仓风控、形态复盘和通知推送串成一条自动化链路，并已扩展支持港股与美股漏斗扫描。
 
-React Web、CLI、MCP 与 GitHub Actions 共同组成当前产品形态；日线行情通过 TickFlow 实时拉取（无 Supabase 行情缓存），Supabase 仅用于用户配置、持仓、形态复盘、市场信号、信号反馈与任务结果。
+React Web、CLI、MCP 与 GitHub Actions 共同组成当前产品形态；日线行情优先从 Tushare 拉取，未配置或权限不足时依次降级到 AkShare / Baostock / efinance / 腾讯 / 新浪（无 Supabase 行情缓存），Supabase 仅用于用户配置、持仓、形态复盘、市场信号、信号反馈与任务结果。
 
-TickFlow 全市场快照使用 GET `/v1/quotes` 的 `universes` 标的池参数，先整池获取再本地筛选；历史日K默认每批200只，美股通道在 workflow 层单独压到100只。午间及 14:55 独立研究的取数与失败边界见 [批量行情协议](docs/OPERATOR_PLAYBOOK.md#独立午间研究的批量行情协议) 和 [14:55 首屏快照](docs/OPERATOR_PLAYBOOK.md#1455-独立深跌研究的首屏快照)。
+全市场快照与批量日K统一走仓库层取数，优先 Tushare，失败时依次降级到 AkShare / Baostock / efinance / 腾讯 / 新浪；批量并发默认每批200只，美股通道在 workflow 层单独压到100只。午间及 14:55 独立研究的取数与失败边界见 [批量行情协议](docs/OPERATOR_PLAYBOOK.md#独立午间研究的批量行情协议) 和 [14:55 首屏快照](docs/OPERATOR_PLAYBOOK.md#1455-独立深跌研究的首屏快照)。
 
 > Risk disclosure: WyckoffAgent is for educational, research, and informational use. It does not provide investment advice, does not account for every personal financial circumstance, and does not guarantee future performance.
 
@@ -40,17 +40,6 @@ WyckoffAgent 会始终保持开源，欢迎 fork 自行部署、提交 Issue 和
 ## Special Thanks
 
 <table>
-  <tr>
-    <td width="150" align="center">
-      <a href="https://tickflow.org/auth/register?ref=5N4NKTCPL4">
-        <img src="attach/tickflow-logo.png" alt="TickFlow" width="120" />
-      </a>
-    </td>
-    <td>
-      <strong><a href="https://tickflow.org/auth/register?ref=5N4NKTCPL4">TickFlow</a></strong><br />
-      感谢 TickFlow 为 WyckoffAgent 提供高质量 A 股 / 美股 / 港股行情数据能力支持。
-    </td>
-  </tr>
   <tr>
     <td width="150" align="center">
       <strong><a href="https://github.com/waditu/czsc">CZSC</a></strong><br />
@@ -268,7 +257,7 @@ wyckoff mcp-list
 - **会话分叉与导出** — `wyckoff session export/fork` 或 TUI `/fork` 把历史对话变成可复盘、可继续的新分支
 - **标准事件流** — `wyckoff trace --events <scratchpad.jsonl>` / `wyckoff diag` 产出统一 JSONL，方便复盘工具调用时间线
 - **独立边缘后端** — React 统一调用 Hono Worker；后端提供请求 ID、安全响应头、请求体上限、Redis 共享限流和星球会员沙箱任务。读盘室的研究计算必须经用户确认，先进入单并发 Cloudflare Queue，再由签名的 Node 执行桥进入无网络、自动销毁的 Vercel Sandbox；每用户同时仅一个任务，并按日限制创建次数与实际 CPU 用量。Worker 与 bridge 用 `requestId`/`runId` 输出不含脚本与密钥的结构化执行日志，本地支持 VS Code 断点与 `workerd` 集成测试
-- **观察篮临时行情** — 只为当前问题拉取相关 TickFlow 报价，浏览器快照 45 秒后失效，不写入 Redis 或业务数据库
+- **观察篮临时行情** — 只为当前问题拉取相关标的的最新可用行情，浏览器快照 45 秒后失效，不写入 Redis 或业务数据库
 - **依赖卫生检查** — CI 运行 `scripts/check_dependency_hygiene.py`，提示 Python/Web 依赖锁定和 lockfile 风险
 - **测试隔离与单次覆盖率** — pytest 不读取本机 `.env`、底层 socket 默认断网；CI 只执行一次 coverage-instrumented Python 全量套件并复用结果生成覆盖率 artifact
 - **MCP Server** — 19 个公开工具，契约、权限与业务执行分层；[安装与安全边界](docs/PUBLIC_MCP.md)
@@ -324,7 +313,7 @@ wyckoff mcp-list
 
 进阶配置见 [架构文档](docs/ARCHITECTURE.md)。
 
-> 数据源购买：[TickFlow →](https://tickflow.org/auth/register?ref=5N4NKTCPL4) ｜ 大模型购买：[1Route →](https://www.1route.dev/register?aff=359904261)
+> 数据源配置：[Tushare Pro](https://tushare.pro/)（可选，未配置时自动降级到 AkShare / 腾讯 / 新浪）｜ 大模型购买：[1Route →](https://www.1route.dev/register?aff=359904261)
 
 ---
 

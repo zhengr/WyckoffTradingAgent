@@ -252,12 +252,11 @@ def _attach_turnover(all_df_map: dict[str, pd.DataFrame], *, as_of_date: date | 
 def _turnover_volume_shares(df: pd.DataFrame) -> pd.Series:
     source = str(df.attrs.get("upstream_source") or df.attrs.get("source") or "")
     source_units = {
-        "tickflow": "lots",
-        "tickflow_batch": "lots",
         "akshare": "lots",
         "efinance": "lots",
         "tushare": "shares",
         "baostock": "shares",
+        "tencent_hk_us": "shares",
     }
     unit = str(df.attrs.get("volume_unit") or source_units.get(source) or "unknown")
     factor = {"lots": 100.0, "shares": 1.0}.get(unit, float("nan"))
@@ -541,35 +540,36 @@ def _load_ths_hot_events() -> tuple[dict[str, Any], list[dict]]:
 
 def _load_financial_metrics(all_symbols: list[str]) -> dict[str, dict]:
     if env_flag("FUNNEL_SKIP_FINANCIAL_METRICS"):
-        print("[funnel] TickFlow 财务指标已按环境开关跳过")
+        print("[funnel] 财务指标已按环境开关跳过")
         _report_progress("财务指标", "已按环境开关跳过", 0.20)
         return {}
-    api_key = os.getenv("TICKFLOW_API_KEY", "").strip()
-    if not api_key:
-        _report_progress("财务指标", "未配置 TickFlow，跳过", 0.20)
+    from integrations.tushare_client import has_tushare_token
+
+    if not has_tushare_token():
+        _report_progress("财务指标", "未配置 Tushare Token，跳过", 0.20)
         return {}
     try:
-        from integrations.tickflow_client import fetch_financial_metric_map
+        from integrations.tushare_fundamentals import fetch_latest_financial_map
 
-        print(f"[funnel] TickFlow 财务指标请求: symbols={len(all_symbols)}")
+        print(f"[funnel] 财务指标请求: symbols={len(all_symbols)}")
         _report_progress("财务指标", f"请求{len(all_symbols)}只", 0.20)
-        financial_map = fetch_financial_metric_map(api_key, all_symbols)
+        financial_map = fetch_latest_financial_map(all_symbols)
         missing_codes = sorted(set(all_symbols) - set(financial_map))
         covered = len(all_symbols) - len(missing_codes)
         print(
-            f"[funnel] TickFlow 财务指标加载成功: {covered}/{len(all_symbols)}, "
+            f"[funnel] 财务指标加载成功: {covered}/{len(all_symbols)}, "
             f"missing={len(missing_codes)}, sample_missing={','.join(missing_codes[:8]) or '-'}"
         )
         _report_progress("财务指标", f"成功{covered}/{len(all_symbols)}", 0.24)
         return financial_map
     except Exception as e:
-        logger.warning("TickFlow 财务指标加载失败，跳过财务过滤: %s", e)
+        logger.warning("财务指标加载失败，跳过财务过滤: %s", e)
         _report_progress("财务指标", "加载失败，跳过", 0.24)
         return {}
 
 
 def _skipped_financial_metrics(reason: str) -> dict[str, dict]:
-    print(f"[funnel] TickFlow 财务指标跳过: {reason}")
+    print(f"[funnel] 财务指标跳过: {reason}")
     _report_progress("财务指标", reason, 0.20)
     return {}
 

@@ -192,11 +192,11 @@ def test_recommendation_eval_watch_only_handoff_blocks_auto_report(monkeypatch):
 
 def test_evaluate_recommendation_events_surfaces_config_error(monkeypatch):
     def fake_build(_request):
-        raise ValueError("TICKFLOW_API_KEY 未配置")
+        raise ValueError("数据源未配置")
 
     monkeypatch.setattr("workflows.recommendation_event_eval.build_recommendation_event_eval", fake_build)
 
     result = evaluate_recommendation_events()
 
-    assert "TICKFLOW_API_KEY 未配置" in result["error"]
+    assert "数据源未配置" in result["error"]
     assert "SUPABASE_URL" in result["hint"]

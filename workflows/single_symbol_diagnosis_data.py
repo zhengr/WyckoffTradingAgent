@@ -2,20 +2,20 @@
 
 from __future__ import annotations
 
-import os
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
-from datetime import UTC, date, datetime, timedelta
+from datetime import date, timedelta
 from typing import Any
 
 import pandas as pd
 
 from core.wyckoff_engine import normalize_hist_from_fetch
 from integrations.data_source import fetch_stock_hist
+from integrations.data_source_hk_us import fetch_stock_hk_us
 from integrations.fetch_a_share_csv import get_stocks_by_board
 from integrations.index_data_source import fetch_index_hist
 from integrations.market_metadata import fetch_market_cap_map, fetch_sector_map
-from integrations.tickflow_client import TickFlowClient
 from tools.market_universe_meta import load_symbol_name_map
 
 
@@ -32,7 +32,7 @@ def fetch_symbol_history(spec: Any, start: date, end: date, trading_days: int) -
     if spec.market == "cn":
         raw = fetch_stock_hist(spec.symbol, fetch_start, end, adjust="qfq")
     else:
-        raw = _fetch_tickflow_daily(spec.symbol, fetch_start, end, trading_days)
+        raw = fetch_stock_hk_us(spec.symbol, fetch_start, end, "qfq")
     return prepare_symbol_history(raw, start, end, trading_days)
 
 
@@ -69,10 +69,24 @@ def load_rps_universe_histories(
     if not symbols:
         return {}
     logger(f"[diagnosis] RPS 全市场加载: universe={len(symbols)} symbols")
-    client = TickFlowClient(api_key=os.getenv("TICKFLOW_API_KEY", ""))
-    out = _fetch_rps_batches(client, symbols, end, rps_window, logger)
+    fetch_start = start - timedelta(days=max(rps_window * 3, 400))
+    out: dict[str, pd.DataFrame] = {}
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        futures = {executor.submit(_fetch_rps_one, symbol, fetch_start, end, rps_window): symbol for symbol in symbols}
+        for future in as_completed(futures):
+            frame = future.result()
+            if frame is not None:
+                out[futures[future]] = frame
     logger(f"[diagnosis] RPS 历史加载完成: fetched={len(out)}/{len(symbols)}")
     return out
+
+
+def _fetch_rps_one(symbol: str, fetch_start: date, end: date, rps_window: int) -> pd.DataFrame | None:
+    try:
+        raw = fetch_stock_hist(symbol, fetch_start, end, "qfq")
+    except Exception:
+        return None
+    return _normalized_rps_batch({symbol: raw}, rps_window).get(symbol)
 
 
 def prepare_symbol_history(raw: pd.DataFrame, start: date, end: date, trading_days: int) -> pd.DataFrame:
@@ -88,21 +102,6 @@ def prepare_symbol_history(raw: pd.DataFrame, start: date, end: date, trading_da
         return pd.DataFrame()
     trim_from = max(first_idx - trading_days, 0)
     return df[(df.index >= trim_from) & (df["date_obj"] <= end)].reset_index(drop=True)
-
-
-def _fetch_tickflow_daily(symbol: str, start: date, end: date, trading_days: int) -> pd.DataFrame:
-    client = TickFlowClient(api_key=os.getenv("TICKFLOW_API_KEY", ""))
-    start_ms = _date_to_utc_ms(start)
-    end_ms = _date_to_utc_ms(end + timedelta(days=1))
-    count = max((end - start).days + 10, trading_days * 3, 1200)
-    return client.get_klines(
-        symbol,
-        period="1d",
-        count=count,
-        start_time_ms=start_ms,
-        end_time_ms=end_ms,
-        adjust="forward",
-    )
 
 
 def _name_map(spec: Any) -> dict[str, str]:
@@ -145,24 +144,6 @@ def _rps_symbols(spec: Any) -> list[str]:
     return [symbol for symbol in symbols if symbol and symbol != spec.symbol]
 
 
-def _fetch_rps_batches(
-    client: TickFlowClient,
-    symbols: list[str],
-    end: date,
-    rps_window: int,
-    log: Callable[[str], None],
-) -> dict[str, pd.DataFrame]:
-    count = rps_window + 30
-    end_ms = _date_to_utc_ms(end + timedelta(days=1))
-    out: dict[str, pd.DataFrame] = {}
-    chunks = [symbols[index : index + 200] for index in range(0, len(symbols), 200)]
-    for idx, chunk in enumerate(chunks, 1):
-        log(f"[diagnosis] RPS K线批次 {idx}/{len(chunks)}")
-        batch = client.get_klines_batch(chunk, period="1d", count=count, end_time_ms=end_ms, adjust="forward")
-        out.update(_normalized_rps_batch(batch, rps_window))
-    return out
-
-
 def _normalized_rps_batch(batch: dict[str, pd.DataFrame], rps_window: int) -> dict[str, pd.DataFrame]:
     out: dict[str, pd.DataFrame] = {}
     for symbol, df in batch.items():
@@ -175,8 +156,3 @@ def _normalized_rps_batch(batch: dict[str, pd.DataFrame], rps_window: int) -> di
 def _first_index_on_or_after(df: pd.DataFrame, day: date) -> int | None:
     hits = df.index[df["date_obj"] >= day]
     return int(hits[0]) if len(hits) else None
-
-
-def _date_to_utc_ms(day: date) -> int:
-    dt = datetime.combine(day, datetime.min.time(), tzinfo=UTC)
-    return int(dt.timestamp() * 1000)

@@ -60,7 +60,6 @@ portfolioRoutes.put('/', async (c) => {
     { supabase, fetch: globalThis.fetch },
     auth.userId,
     {
-      quoteEndpoint: `${(c.env.TICKFLOW_API_BASE || 'https://api.tickflow.org').replace(/\/$/, '')}/v1/quotes`,
       cnyRates: {
         HKD: positiveRate(c.env.PORTFOLIO_HKD_CNY_RATE),
         USD: positiveRate(c.env.PORTFOLIO_USD_CNY_RATE),

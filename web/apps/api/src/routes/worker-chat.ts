@@ -25,12 +25,11 @@ function agentServiceDeps(env: Env, userId: string, accessToken: string) {
     loadCredentials: async () => {
       const { data } = await supabase()
         .from('user_settings')
-        .select('tickflow_api_key, tushare_token')
+        .select('tushare_token')
         .eq('user_id', userId)
         .single()
       const row = (data || {}) as Record<string, unknown>
       return {
-        tickflow_api_key: String(row.tickflow_api_key || '').trim(),
         tushare_token: String(row.tushare_token || '').trim(),
       }
     },

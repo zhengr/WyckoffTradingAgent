@@ -89,7 +89,6 @@ export function AgentPanel ({ data, notes, save, reload, onMessage, flash }: Pro
 
       <SecHead k="datasource.heading" />
       <p className="dlg-sub">{t('datasource.note')}</p>
-      <Row label="TickFlow"><KeyState present={data.has_tickflow_key} /></Row>
       <Row label="Tushare"><KeyState present={data.has_tushare_token} /></Row>
 
       <DaemonSection onMessage={onMessage} />

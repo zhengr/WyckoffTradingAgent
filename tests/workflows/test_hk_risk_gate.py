@@ -47,7 +47,7 @@ class TestApplyHkRiskGate:
         assert "流动性" in blocked["08001.HK"]
 
     def test_amount_all_zero_falls_back_to_close_times_volume(self):
-        """TickFlow 港股历史数据 amount 字段恒为 0，必须回退为 close*volume 计算日均成交额，
+        """港股历史数据 amount 字段缺失，必须回退为 close*volume 计算日均成交额，
         否则所有港股都会被误判为流动性不足而全部剔除（真实生产回归 bug）。"""
         df_map = {"00700.HK": _frame([300.0, 305.0, 310.0], amount=0.0, volume=1_000_000.0)}
         kept, blocked = apply_hk_risk_gate(["00700.HK"], df_map)

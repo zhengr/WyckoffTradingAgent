@@ -8,11 +8,11 @@ from typing import Any
 
 from agents.stock_data_helpers import (
     code_to_name,
-    collect_tickflow_limit_hints_from_df,
     hist_metadata,
     latest_hist_date,
 )
-from agents.tool_context import ToolContext, ensure_tushare_token, get_credential
+from agents.tool_context import ToolContext, ensure_tushare_token
+from core.candidate_metadata import code6
 from utils.safe import drop_empty as _drop_empty
 from utils.safe import safe_float as _safe_float
 from utils.trading_clock import cn_today
@@ -53,14 +53,13 @@ def analyze_stock(
 
 def _fundamental_result(code: str, tool_context: ToolContext | None) -> dict:
     from core.fundamental_overlay import evaluate_fundamental_overlay
-    from integrations.tickflow_client import TickFlowClient
+    from integrations.tushare_client import has_tushare_token
+    from integrations.tushare_fundamentals import fetch_latest_financial_map
 
-    api_key = get_credential(tool_context, "tickflow_api_key", "TICKFLOW_API_KEY")
-    if not api_key:
-        return {"error": "基本面查询需要 TickFlow API Key，请先配置 TICKFLOW_API_KEY"}
-    records = TickFlowClient(api_key=api_key).get_financial_metrics([code], latest=True)
-    latest = next(iter(records.values()), []) if records else []
-    metrics = latest[0] if latest else None
+    ensure_tushare_token(tool_context)
+    if not has_tushare_token():
+        return {"error": "基本面查询需要 Tushare Token，请先配置 TUSHARE_TOKEN"}
+    metrics = fetch_latest_financial_map([code]).get(code6(code))
     overlay = evaluate_fundamental_overlay(metrics, signal_date=cn_today())
     return {"code": code, "name": code_to_name(code), "data_status": "ok" if metrics else "no_data", **overlay}
 
@@ -73,7 +72,6 @@ def _price_result(code: str, days: int, end_date: date) -> dict:
     df = get_stock_hist(code, start_date, end_date)
     if df is None or df.empty:
         return {"error": f"无法获取 {code} 的行情数据"}
-    hist_hints = collect_tickflow_limit_hints_from_df(df)
     hist_meta = hist_metadata(df)
     df = normalize_hist_df(df).tail(days)
     latest = df.iloc[-1] if len(df) > 0 else {}
@@ -86,8 +84,6 @@ def _price_result(code: str, days: int, end_date: date) -> dict:
         **hist_meta,
         "data": _price_records(df),
     }
-    if hist_hints:
-        payload["tickflow_limit_hint"] = hist_hints[0]
     return payload
 
 
@@ -113,7 +109,6 @@ def _diagnosis_result(code: str, cost: float, end_date: date, buy_dt: str = "") 
     df = get_stock_hist(code, end_date - timedelta(days=500), end_date)
     if df is None or df.empty:
         return {"error": f"无法获取 {code} 的行情数据"}
-    hist_hints = collect_tickflow_limit_hints_from_df(df)
     hist_meta = hist_metadata(df)
     latest_date = latest_hist_date(df, "日期")
     df = normalize_hist_df(df)
@@ -124,8 +119,6 @@ def _diagnosis_result(code: str, cost: float, end_date: date, buy_dt: str = "") 
         latest_date or latest_hist_date(df),
         hist_meta,
     )
-    if hist_hints:
-        payload["tickflow_limit_hint"] = hist_hints[0]
     return _attach_chart_news_events(payload, code, df)
 
 

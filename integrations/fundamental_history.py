@@ -1,9 +1,9 @@
-"""Point-in-time financial history from TickFlow, keyed on the repository's six-digit code.
+"""Point-in-time financial history from Tushare ``fina_indicator``, keyed on six-digit code.
 
-``/v1/financials/metrics?latest=false`` returns every quarterly record since listing with an
-``announce_date``; a record may only be used on signal dates strictly after that day, since
-the vendor gives a date without a time. Records without an announce date are dropped rather
-than approximated by ``period_end`` — the report-period end is not when the market learned it.
+The Tushare adapter returns every quarterly record with an ``announce_date``; a record may only
+be used on signal dates strictly after that day, since the vendor gives a date without a time.
+Records without an announce date are dropped rather than approximated by ``period_end`` — the
+report-period end is not when the market learned it.
 """
 
 from __future__ import annotations
@@ -12,7 +12,6 @@ from datetime import date, timedelta
 from typing import Any
 
 from core.asof_cut import FINANCIAL_RECORD_MAX_AGE_DAYS
-from core.candidate_metadata import code6
 
 HISTORY_FIELDS = (
     "announce_date",
@@ -30,16 +29,17 @@ HISTORY_FIELDS = (
 def fetch_financial_history(api_key: str, symbols: list[str], *, since: date) -> dict[str, list[dict[str, Any]]]:
     """Quarterly records announced on or after ``since - FINANCIAL_RECORD_MAX_AGE_DAYS``, trimmed to HISTORY_FIELDS.
 
-    The full vendor payload for the A-share universe is ~130 MB; the backtest only ever looks
-    back one staleness window before its first signal date, so older rows are not written.
+    The backtest only ever looks back one staleness window before its first signal date, so
+    older rows are not written. Without a Tushare token the result is an empty dict.
     """
-    from integrations.tickflow_client import TickFlowClient
+    # api_key 只保留签名兼容；实际凭据来自 integrations.tushare_client（TUSHARE_TOKEN）。
+    del api_key
+    from integrations.tushare_fundamentals import fetch_history_map
 
     floor = (since - timedelta(days=FINANCIAL_RECORD_MAX_AGE_DAYS)).isoformat()
-    raw = TickFlowClient(api_key=api_key).get_financial_metrics(symbols, latest=False)
+    raw = fetch_history_map(symbols)
     out: dict[str, list[dict[str, Any]]] = {}
-    for sym, records in raw.items():
-        code = code6(sym)
+    for code, records in raw.items():
         kept = [
             {key: item.get(key) for key in HISTORY_FIELDS}
             for item in records

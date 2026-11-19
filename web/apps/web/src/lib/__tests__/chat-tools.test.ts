@@ -106,7 +106,7 @@ describe('buildValueAgentDigest', () => {
   it('adds score signals to the compact value prompt', () => {
     const digest = buildValueAgentDigest({
       symbol: '600519.SH',
-      source: 'tickflow',
+      source: 'tushare',
       metrics: {
         period_end: '2026-03-31',
         roe: 18.2,
@@ -118,7 +118,7 @@ describe('buildValueAgentDigest', () => {
       },
     })
 
-    expect(digest).toContain('价值面摘要（来源：TickFlow，报告期：2026-03-31）')
+    expect(digest).toContain('价值面摘要（来源：Tushare，报告期：2026-03-31）')
     expect(digest).toContain('ROE=18.20%')
     expect(digest).toContain('价值面评级：稳健')
     expect(digest).toContain('质量信号：')
@@ -129,7 +129,7 @@ describe('buildValueAgentDigest', () => {
   it('appends a severe-risk warning for distressed fundamentals', () => {
     const digest = buildValueAgentDigest({
       symbol: '000002.SZ',
-      source: 'tickflow',
+      source: 'tushare',
       metrics: {
         period_end: '2024-12-31',
         roe: -5,
@@ -261,19 +261,19 @@ describe('execMarketOverview', () => {
 })
 
 describe('execMarketHistory', () => {
-  it('uses TickFlow index K-line history for historical market questions', async () => {
-    const deps = createMockDeps({ user_settings: { tickflow_api_key: ' tf-test ', tushare_token: '' } })
+  it('uses server index K-line history for historical market questions', async () => {
+    const deps = createMockDeps({ user_settings: { tushare_token: '' } })
     deps.fetch = vi.fn().mockResolvedValue({
       ok: true,
       json: () => Promise.resolve({
+        code: 0,
         data: {
-          '000001.SH': {
-            timestamp: [1704067200000, 1704153600000, 1704240000000],
-            open: [3000, 3010, 3020],
-            high: [3030, 3040, 3050],
-            low: [2990, 3000, 3010],
-            close: [3020, 3030, 3040],
-            volume: [1000, 1200, 1300],
+          sh000001: {
+            day: [
+              ['2026-11-16', '3000', '3020', '3030', '2990', '10'],
+              ['2026-11-17', '3010', '3030', '3040', '3000', '12'],
+              ['2026-11-18', '3020', '3040', '3050', '3010', '13'],
+            ],
           },
         },
       }),
@@ -283,21 +283,21 @@ describe('execMarketHistory', () => {
 
     expect(result).toBe('mocked LLM response')
     expect(deps.fetch).toHaveBeenCalledWith(
-      expect.stringContaining('symbol=000001.SH'),
-      expect.objectContaining({ headers: expect.objectContaining({ 'x-api-key': 'tf-test' }) }),
+      expect.stringContaining('sh000001'),
+      expect.anything(),
     )
     expect(deps.generateText).toHaveBeenCalledWith(expect.objectContaining({
       prompt: expect.stringContaining('最近3个交易日'),
     }))
   })
 
-  it('explains missing TickFlow key', async () => {
-    const deps = createMockDeps({ user_settings: { tickflow_api_key: '', tushare_token: '' } })
+  it('returns a graceful message when server kline is unavailable', async () => {
+    const deps = createMockDeps({ user_settings: { tushare_token: '' } })
 
     const result = await execMarketHistory(deps, 'user1', {}, 100, 'sse')
 
-    expect(result).toContain('配置 TickFlow API Key')
-    expect(deps.fetch).not.toHaveBeenCalled()
+    expect(result).toContain('无法获取')
+    expect(deps.generateText).not.toHaveBeenCalled()
   })
 })
 
@@ -1012,7 +1012,7 @@ describe('execStrategyDecision', () => {
 describe('execGenerateAiReport', () => {
   it('adds strategy policy context to the report and prompt', async () => {
     const deps = createMockDeps({
-      user_settings: { tickflow_api_key: ' tf-test ', tushare_token: '' },
+      user_settings: { tushare_token: '' },
       signal_policy_shadow_runs: [
         {
           shadow_diff_stats_json: {
@@ -1038,10 +1038,15 @@ describe('execGenerateAiReport', () => {
       .mockResolvedValueOnce({
         ok: true,
         json: () => Promise.resolve({
-          data: [
-            { date: '2026-07-01', open: 10, high: 11, low: 9.8, close: 10.8, volume: 1000 },
-            { date: '2026-07-02', open: 10.8, high: 11.2, low: 10.6, close: 11, volume: 1200 },
-          ],
+          code: 0,
+          data: {
+            sh600519: {
+              qfqday: [
+                ['2026-11-17', '10', '10.8', '11', '9.8', '10'],
+                ['2026-11-18', '10.8', '11', '11.2', '10.6', '12'],
+              ],
+            },
+          },
         }),
       })
       .mockResolvedValue({ ok: false, json: () => Promise.resolve({}) }) as unknown as ToolDeps['fetch']
@@ -1064,32 +1069,20 @@ describe('execGenerateAiReport', () => {
 })
 
 describe('execAnalyzeStock', () => {
-  it('includes value snapshot when analyzing A-share stocks', async () => {
-    const deps = createMockDeps({ user_settings: { tickflow_api_key: ' tf-test ', tushare_token: '' } })
+  it('analyzes an A-share stock with server kline data', async () => {
+    const deps = createMockDeps({ user_settings: { tushare_token: '' } })
     const fetchMock = vi.fn()
-      .mockResolvedValueOnce({
+      .mockResolvedValue({
         ok: true,
         json: () => Promise.resolve({
-          data: [
-            { date: '2024-01-01', open: 100, high: 103, low: 99, close: 102, volume: 1000 },
-            { date: '2024-01-02', open: 102, high: 105, low: 101, close: 104, volume: 1200 },
-          ],
-        }),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({
+          code: 0,
           data: {
-            '600519.SH': [{
-              period_end: '2026-03-31',
-              roe: 18.2,
-              net_income_yoy: 11.8,
-              revenue_yoy: 6.5,
-              gross_margin: 91.6,
-              net_margin: 48.3,
-              debt_to_asset_ratio: 21.4,
-              operating_cash_to_revenue: 16.2,
-            }],
+            sh600519: {
+              qfqday: [
+                ['2026-11-17', '100', '102', '103', '99', '10'],
+                ['2026-11-18', '102', '104', '105', '101', '12'],
+              ],
+            },
           },
         }),
       })
@@ -1105,34 +1098,31 @@ describe('execAnalyzeStock', () => {
     )
 
     expect(result.markdown).toBe('mocked LLM response')
-    expect(fetchMock).toHaveBeenCalledWith(
-      expect.stringContaining('/api/llm-proxy/v1/financials/metrics?'),
-      expect.objectContaining({ headers: expect.objectContaining({ 'x-api-key': 'tf-test' }) }),
-    )
+    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('sh600519'), expect.anything())
     expect(deps.generateText).toHaveBeenCalledWith(expect.objectContaining({
       system: expect.stringContaining('价值面校准'),
-      prompt: expect.stringContaining('价值面摘要（来源：TickFlow，报告期：2026-03-31）'),
     }))
     expect(deps.generateText).toHaveBeenCalledWith(expect.objectContaining({
       prompt: expect.stringContaining('K线共2根'),
     }))
+    expect(deps.generateText).toHaveBeenCalledWith(expect.objectContaining({
+      prompt: expect.stringContaining('数据来源：腾讯'),
+    }))
   })
 
-  it('uses TickFlow batch fallback for market symbols', async () => {
-    const deps = createMockDeps({ user_settings: { tickflow_api_key: ' tf-test ', tushare_token: '' } })
+  it('fetches server K-line for US symbols', async () => {
+    const deps = createMockDeps({ user_settings: { tushare_token: '' } })
     const fetchMock = vi.fn()
-      .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ data: {} }) })
-      .mockResolvedValueOnce({
+      .mockResolvedValue({
         ok: true,
         json: () => Promise.resolve({
+          code: 0,
           data: {
-            'AAPL.US': {
-              timestamp: [1704067200000, 1704153600000],
-              open: [100, 101],
-              high: [102, 103],
-              low: [99, 100],
-              close: [101, 102],
-              volume: [1000, 1200],
+            usAAPL: {
+              day: [
+                ['2026-11-17', '100', '101', '102', '99', '1000'],
+                ['2026-11-18', '101', '102', '103', '100', '1200'],
+              ],
             },
           },
         }),
@@ -1149,32 +1139,26 @@ describe('execAnalyzeStock', () => {
     )
 
     expect(result.markdown).toBe('mocked LLM response')
-    expect(fetchMock).toHaveBeenNthCalledWith(
-      2,
-      expect.stringContaining('/api/llm-proxy/v1/klines/batch?'),
-      expect.objectContaining({ headers: expect.objectContaining({ 'x-api-key': 'tf-test' }) }),
-    )
+    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('usAAPL'), expect.anything())
   })
 
-  it('normalizes TickFlow epoch-second timestamps for analyze_stock digests', async () => {
-    const deps = createMockDeps({ user_settings: { tickflow_api_key: 'tf-test', tushare_token: '' } })
-    deps.fetch = vi.fn()
+  it('uses Tushare kline when a token is configured', async () => {
+    const deps = createMockDeps({ user_settings: { tushare_token: ' tu-test ' } })
+    const fetchMock = vi.fn()
       .mockResolvedValueOnce({
         ok: true,
         json: () => Promise.resolve({
-          data: {
-            '600519.SH': {
-              timestamp: [1704067200, 1704153600],
-              open: [100, 101],
-              high: [102, 103],
-              low: [99, 100],
-              close: [101, 102],
-              volume: [1000, 1200],
-            },
-          },
+          data: { fields: ['trade_date', 'open', 'high', 'low', 'close', 'vol'], items: [['20240101', '100', '103', '99', '102', '1000']] },
         }),
       })
-      .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ data: {} }) }) as unknown as ToolDeps['fetch']
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({
+          data: { fields: ['trade_date', 'adj_factor'], items: [['20240101', '1']] },
+        }),
+      })
+      .mockResolvedValue({ ok: false, json: () => Promise.resolve({}) })
+    deps.fetch = fetchMock as unknown as ToolDeps['fetch']
 
     await execAnalyzeStock(
       deps,
@@ -1185,16 +1169,17 @@ describe('execAnalyzeStock', () => {
       '贵州茅台',
     )
 
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/llm-proxy/',
+      expect.objectContaining({ body: expect.stringContaining('daily') }),
+    )
     expect(deps.generateText).toHaveBeenCalledWith(expect.objectContaining({
-      prompt: expect.stringMatching(/2024-01-01[\s\S]*2024-01-02/),
-    }))
-    expect(deps.generateText).toHaveBeenCalledWith(expect.objectContaining({
-      prompt: expect.not.stringContaining('1970-'),
+      prompt: expect.stringContaining('数据来源：Tushare'),
     }))
   })
 
-  it('explains missing TickFlow key for market symbols', async () => {
-    const deps = createMockDeps({ user_settings: { tickflow_api_key: '', tushare_token: '' } })
+  it('returns a data-unavailable error when no source returns kline', async () => {
+    const deps = createMockDeps({ user_settings: { tushare_token: '' } })
 
     const result = await execAnalyzeStock(
       deps,
@@ -1205,7 +1190,7 @@ describe('execAnalyzeStock', () => {
       '苹果',
     )
 
-    expect(result.summary).toContain('设置页配置 TickFlow API Key')
-    expect(deps.fetch).not.toHaveBeenCalled()
+    expect(result.summary).toContain('无法获取')
+    expect(result.summary).toContain('AAPL.US')
   })
 })

@@ -41,7 +41,7 @@ export function SettingsPage() {
     showToast,
     chatProvider: form.chatProvider,
     activeModelConfig: form.activeModelConfig,
-    tickflowKey: form.tickflowKey,
+    tushareToken: form.tushareToken,
   })
   const canSaveActiveTab =
     activeTab === 'sources'
@@ -67,12 +67,12 @@ export function SettingsPage() {
                 testing={connectivity.testing}
                 testResults={connectivity.testResults}
                 canTestModel={Boolean(form.activeModelConfig?.api_key && form.activeModelConfig?.model)}
-                canTestDataSource={Boolean(form.tickflowKey.trim())}
+                canTestDataSource={Boolean(form.tushareToken.trim())}
                 onTestModel={connectivity.handleModelTest}
                 onTestDataSource={connectivity.handleDataSourceTest}
               />
             )}
-            {activeTab === 'sources' && <SourcesPanel tickflowKey={form.tickflowKey} setTickflowKey={form.setTickflowKey} />}
+            {activeTab === 'sources' && <SourcesPanel tushareToken={form.tushareToken} setTushareToken={form.setTushareToken} />}
             {activeTab === 'model' && (
               <ModelPanel chatProvider={form.chatProvider} configs={form.configs} setChatProvider={form.setChatProvider} updateConfig={form.updateConfig} />
             )}
@@ -152,7 +152,7 @@ function useSettingsForm(
       userId,
       chatProvider: snapshot.chatProvider,
       configs: snapshot.configs,
-      tickflowKey: snapshot.tickflowKey,
+      tushareToken: snapshot.tushareToken,
       feishuWebhook: snapshot.feishuWebhook,
       wecomWebhook: snapshot.wecomWebhook,
       dingtalkWebhook: snapshot.dingtalkWebhook,
@@ -177,7 +177,7 @@ function useSettingsForm(
 function useSettingsDraftState() {
   const [chatProvider, setChatProvider] = useState<Provider>('1route')
   const [configs, setConfigs] = useState<Record<string, ProviderConfig>>(() => buildDefaultProviderConfigs())
-  const [tickflowKey, setTickflowKey] = useState('')
+  const [tushareToken, setTushareToken] = useState('')
   const [feishuWebhook, setFeishuWebhook] = useState('')
   const [wecomWebhook, setWecomWebhook] = useState('')
   const [dingtalkWebhook, setDingtalkWebhook] = useState('')
@@ -185,19 +185,19 @@ function useSettingsDraftState() {
   const [tgChatId, setTgChatId] = useState('')
 
   const fields = {
-    chatProvider, setChatProvider, configs, tickflowKey, setTickflowKey,
+    chatProvider, setChatProvider, configs, tushareToken, setTushareToken,
     feishuWebhook, setFeishuWebhook, wecomWebhook, setWecomWebhook,
     dingtalkWebhook, setDingtalkWebhook, tgBotToken, setTgBotToken, tgChatId, setTgChatId,
   }
 
   const toSnapshot = useCallback((): SettingsDraftSnapshot => ({
-    chatProvider, configs, tickflowKey, feishuWebhook, wecomWebhook, dingtalkWebhook, tgBotToken, tgChatId,
-  }), [chatProvider, configs, dingtalkWebhook, feishuWebhook, tgBotToken, tgChatId, tickflowKey, wecomWebhook])
+    chatProvider, configs, tushareToken, feishuWebhook, wecomWebhook, dingtalkWebhook, tgBotToken, tgChatId,
+  }), [chatProvider, configs, dingtalkWebhook, feishuWebhook, tgBotToken, tgChatId, tushareToken, wecomWebhook])
 
   const applySnapshot = useCallback((next: SettingsDraftSnapshot) => {
     setChatProvider(next.chatProvider)
     setConfigs(cloneProviderConfigs(next.configs))
-    setTickflowKey(next.tickflowKey)
+    setTushareToken(next.tushareToken)
     setFeishuWebhook(next.feishuWebhook)
     setWecomWebhook(next.wecomWebhook)
     setDingtalkWebhook(next.dingtalkWebhook)
@@ -219,19 +219,19 @@ function useSettingsCapabilityView(
   fields: ReturnType<typeof useSettingsDraftState>['fields'],
   savedSnapshot: SettingsDraftSnapshot,
 ) {
-  const { chatProvider, configs, tickflowKey, feishuWebhook, wecomWebhook, dingtalkWebhook, tgBotToken, tgChatId } = fields
+  const { chatProvider, configs, tushareToken, feishuWebhook, wecomWebhook, dingtalkWebhook, tgBotToken, tgChatId } = fields
   const activeModelConfig = configs[chatProvider]
   const savedModelConfig = savedSnapshot.configs[savedSnapshot.chatProvider]
   const settingsCapabilities = useMemo(
     () => buildSettingsCapabilityRows({
-      tickflow: tickflowKey,
-      savedTickflow: savedSnapshot.tickflowKey,
+      tushare: tushareToken,
+      savedTushare: savedSnapshot.tushareToken,
       modelProviderLabel: PROVIDER_LABELS[chatProvider],
       modelConfig: activeModelConfig,
       savedModelConfig,
       providerMatchesSaved: chatProvider === savedSnapshot.chatProvider,
     }),
-    [tickflowKey, chatProvider, activeModelConfig, savedSnapshot, savedModelConfig],
+    [tushareToken, chatProvider, activeModelConfig, savedSnapshot, savedModelConfig],
   )
   const settingsCapabilitySummary = useMemo(
     () => summarizeSettingsCapabilities(settingsCapabilities),
@@ -239,9 +239,9 @@ function useSettingsCapabilityView(
   )
   const hasUnsavedDraft = useMemo(
     () => !sameSettingsSnapshot(savedSnapshot, {
-      chatProvider, configs, tickflowKey, feishuWebhook, wecomWebhook, dingtalkWebhook, tgBotToken, tgChatId,
+      chatProvider, configs, tushareToken, feishuWebhook, wecomWebhook, dingtalkWebhook, tgBotToken, tgChatId,
     }),
-    [savedSnapshot, chatProvider, configs, tickflowKey, feishuWebhook, wecomWebhook, dingtalkWebhook, tgBotToken, tgChatId],
+    [savedSnapshot, chatProvider, configs, tushareToken, feishuWebhook, wecomWebhook, dingtalkWebhook, tgBotToken, tgChatId],
   )
   return { settingsCapabilities, settingsCapabilitySummary, hasUnsavedDraft }
 }
@@ -252,7 +252,7 @@ function snapshotFromSettingsRow(data: SettingsRow): SettingsDraftSnapshot {
   return {
     chatProvider: provider,
     configs: cloneProviderConfigs(configs),
-    tickflowKey: String(data.tickflow_api_key || ''),
+    tushareToken: String(data.tushare_token || ''),
     feishuWebhook: String(data.feishu_webhook || ''),
     wecomWebhook: String(data.wecom_webhook || ''),
     dingtalkWebhook: String(data.dingtalk_webhook || ''),
@@ -265,10 +265,10 @@ function useConnectivityTests(args: {
   showToast: (message: string, kind?: ToastKind) => void
   chatProvider: Provider
   activeModelConfig?: ProviderConfig
-  tickflowKey: string
+  tushareToken: string
 }) {
   const { t } = usePreferences()
-  const { showToast, chatProvider, activeModelConfig, tickflowKey } = args
+  const { showToast, chatProvider, activeModelConfig, tushareToken } = args
   const [testing, setTesting] = useState<ConnectivityRunning>({ model: false, dataSource: false })
   const [testResults, setTestResults] = useState<ConnectivityState>({ model: null, dataSource: null })
 
@@ -313,15 +313,15 @@ function useConnectivityTests(args: {
   }, [activeModelConfig, chatProvider, runConnectivityTest, showToast, t])
 
   const handleDataSourceTest = useCallback(async () => {
-    if (!tickflowKey.trim()) {
+    if (!tushareToken.trim()) {
       showToast(t('settings.testDataSourceMissing'), 'error')
       return
     }
     if (!window.confirm(t('settings.testDataSourceConfirm'))) return
     await runConnectivityTest('dataSource', '/api/settings/test-data-source', {
-      tickflow_api_key: tickflowKey,
+      tushare_token: tushareToken,
     })
-  }, [runConnectivityTest, showToast, t, tickflowKey])
+  }, [runConnectivityTest, showToast, t, tushareToken])
 
   return { testing, testResults, handleModelTest, handleDataSourceTest }
 }
@@ -532,13 +532,12 @@ function CapabilityRow({ row }: { row: ReturnType<typeof buildSettingsCapability
   )
 }
 
-function SourcesPanel({ tickflowKey, setTickflowKey }: { tickflowKey: string; setTickflowKey: (value: string) => void }) {
+function SourcesPanel({ tushareToken, setTushareToken }: { tushareToken: string; setTushareToken: (value: string) => void }) {
   const { t } = usePreferences()
   return (
     <section className="space-y-4">
-      <PromoPanel icon={<Database size={15} />} title={t('settings.dataSources')} body={t('settings.tickflowPromo')} href="https://tickflow.org/auth/register?ref=5N4NKTCPL4" tone="emerald" />
       <div className="glass-panel rounded-2xl p-5 space-y-4 shadow-sm">
-        <Input label={t('settings.tickflowApiKey')} type="password" value={tickflowKey} onChange={setTickflowKey} placeholder="tf-..." />
+        <Input label={t('settings.tushareToken')} type="password" value={tushareToken} onChange={setTushareToken} placeholder="" />
       </div>
     </section>
   )
@@ -773,7 +772,7 @@ function buildSettingsPayload(args: {
   userId: string
   chatProvider: Provider
   configs: Record<string, ProviderConfig>
-  tickflowKey: string
+  tushareToken: string
   feishuWebhook: string
   wecomWebhook: string
   dingtalkWebhook: string
@@ -796,7 +795,7 @@ function buildSettingsPayload(args: {
     anthropic_model: args.configs.anthropic?.model || PROVIDER_DEFAULT_MODELS.anthropic,
     anthropic_base_url: args.configs.anthropic?.base_url || PROVIDER_BASE_URLS.anthropic,
     custom_providers: buildCustomProviders(args.configs),
-    tickflow_api_key: args.tickflowKey,
+    tushare_token: args.tushareToken,
     feishu_webhook: args.feishuWebhook,
     wecom_webhook: args.wecomWebhook,
     dingtalk_webhook: args.dingtalkWebhook,
@@ -869,7 +868,7 @@ function statusDotClass(status: ReturnType<typeof buildSettingsCapabilityRows>[n
 interface SettingsDraftSnapshot {
   chatProvider: Provider
   configs: Record<string, ProviderConfig>
-  tickflowKey: string
+  tushareToken: string
   feishuWebhook: string
   wecomWebhook: string
   dingtalkWebhook: string
@@ -881,7 +880,7 @@ function emptySettingsSnapshot(): SettingsDraftSnapshot {
   return {
     chatProvider: '1route',
     configs: buildDefaultProviderConfigs(),
-    tickflowKey: '',
+    tushareToken: '',
     feishuWebhook: '',
     wecomWebhook: '',
     dingtalkWebhook: '',
@@ -898,7 +897,7 @@ function cloneProviderConfigs(configs: Record<string, ProviderConfig>): Record<s
 
 function sameSettingsSnapshot(left: SettingsDraftSnapshot, right: SettingsDraftSnapshot): boolean {
   if (left.chatProvider !== right.chatProvider) return false
-  if (left.tickflowKey.trim() !== right.tickflowKey.trim()) return false
+  if (left.tushareToken.trim() !== right.tushareToken.trim()) return false
   if (left.feishuWebhook.trim() !== right.feishuWebhook.trim()) return false
   if (left.wecomWebhook.trim() !== right.wecomWebhook.trim()) return false
   if (left.dingtalkWebhook.trim() !== right.dingtalkWebhook.trim()) return false

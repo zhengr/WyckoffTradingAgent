@@ -19,10 +19,8 @@ def test_snapshot_range_prefetches_double_trading_days() -> None:
     assert date_range.prefetch_start == "20260112"
 
 
-def test_fetch_snapshot_frames_falls_back_when_batch_fails(monkeypatch) -> None:
+def test_fetch_snapshot_frames_uses_concurrent_per_symbol_fetch(monkeypatch) -> None:
     frame = pd.DataFrame({"symbol": ["000001"], "收盘": [10.0]})
-    monkeypatch.setattr(snapshot, "_tickflow_batch_enabled", lambda: True)
-    monkeypatch.setattr(snapshot, "_fetch_batch_tickflow", lambda *args: (_ for _ in ()).throw(RuntimeError("down")))
     monkeypatch.setattr(snapshot, "_fetch_concurrent", lambda *args: ([frame], 1, 0, []))
 
     frames, ok, fail, fail_samples = snapshot._fetch_snapshot_frames(["000001"], "20260101", "20260618", 2)

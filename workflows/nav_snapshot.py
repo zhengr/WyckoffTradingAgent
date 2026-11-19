@@ -43,7 +43,7 @@ def build_nav_snapshot(portfolio_id: str, trade_date: str) -> NavSnapshotResult:
     from core.portfolio_valuation import PortfolioValuationError, calculate_portfolio_valuation
     from integrations.portfolio_market_value import load_portfolio_quote_marks
     from integrations.supabase_base import create_admin_client
-    from integrations.supabase_portfolio import load_portfolio_state, portfolio_tickflow_key
+    from integrations.supabase_portfolio import load_portfolio_state
 
     if not trade_date:
         return NavSnapshotResult(False, portfolio_id, trade_date, message="缺少 trade_date")
@@ -70,11 +70,8 @@ def build_nav_snapshot(portfolio_id: str, trade_date: str) -> NavSnapshotResult:
             day_pnl=0.0,
             day_pnl_pct=0.0,
         )
-    api_key = portfolio_tickflow_key(portfolio_id, client)
-    if not api_key:
-        return NavSnapshotResult(False, portfolio_id, trade_date, message="未配置 TickFlow API Key")
     try:
-        prices, prev_closes, rates = load_portfolio_quote_marks(positions, api_key)
+        prices, prev_closes, rates = load_portfolio_quote_marks(positions)
         valuation = calculate_portfolio_valuation(free_cash, positions, prices, rates)
     except PortfolioValuationError as exc:
         # 行情缺失时**不写**部分估值：一个偏低的净值比没有净值更有害。

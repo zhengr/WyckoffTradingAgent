@@ -156,17 +156,17 @@ describe('POST /chat forwarding', () => {
   })
 
   it('merges the data-tool credentials with the always-sent llm_* ones', async () => {
-    const { routes, upstream } = build({ loadCredentials: async () => ({ tushare_token: 'tu-1', tickflow_api_key: 'tk-1' }) })
+    const { routes, upstream } = build({ loadCredentials: async () => ({ tushare_token: 'tu-1' }) })
     await post(routes, { messages: MESSAGES })
     const payload = JSON.parse((upstream.mock.calls[0] as unknown as [string, string])[1]) as Record<string, unknown>
-    expect(payload.credentials).toEqual({ ...LLM_CREDENTIALS, tushare_token: 'tu-1', tickflow_api_key: 'tk-1' })
+    expect(payload.credentials).toEqual({ ...LLM_CREDENTIALS, tushare_token: 'tu-1' })
   })
 
   it('omits a data credential the member has not configured instead of sending a blank', async () => {
     const { routes, upstream } = build({ loadCredentials: async () => ({ tushare_token: 'tu-1' }) })
     await post(routes, { messages: MESSAGES })
     const payload = JSON.parse((upstream.mock.calls[0] as unknown as [string, string])[1]) as Record<string, unknown>
-    expect(payload.credentials).not.toHaveProperty('tickflow_api_key')
+    expect(payload.credentials).toEqual({ ...LLM_CREDENTIALS, tushare_token: 'tu-1' })
   })
 
   it('never echoes a secret back to the client even when the upstream fails', async () => {

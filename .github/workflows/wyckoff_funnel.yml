@@ -26,9 +26,6 @@ jobs:
       WYCKOFF_WRITE_CONTEXT: "server_job"
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
       FEISHU_WEBHOOK_URL: ${{ secrets.FEISHU_WEBHOOK_URL }}
-      TICKFLOW_API_KEY: ${{ secrets.TICKFLOW_API_KEY }}
-      # TickFlow 日K批量上限为 120/min、200标的/次；主漏斗优先走批量接口。
-      TICKFLOW_KLINE_RATE_LIMIT_PER_MIN: "110"
       FUNNEL_EXECUTOR_MODE: "thread"
       FUNNEL_MAX_WORKERS: "4"
       FUNNEL_BATCH_SIZE: "200"

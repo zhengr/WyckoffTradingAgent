@@ -145,7 +145,7 @@ def test_holdings_stop_loss_fires_on_zero_volume_open_without_cooldown_downgrade
 
 
 def test_holdings_stop_loss_matches_bare_six_digit_portfolio_codes():
-    """Portfolio codes are bare 6-digit; TickFlow quotes are suffixed — must still L4."""
+    """Portfolio codes are bare 6-digit; spot quotes are suffixed — must still L4."""
     radar = _load_radar_module()
     holdings = radar.parse_holdings_arg(["600000:10.0:9.50", "000001:12.0:11.0", "830799:8.0:7.2"])
     assert holdings == {
@@ -247,12 +247,10 @@ def test_missing_holding_quote_is_not_silent_and_backfill_restores_stop():
         "ext": {"name": "浦发银行"},
     }
 
-    class FakeClient:
-        def get_quotes(self, symbols=None, universes=None):
-            assert symbols == ["600000.SH"]
-            return {"600000.SH": holding_row}
+    def quote_fetcher():
+        return {"600000.SH": holding_row}
 
-    merged = radar._backfill_holding_quotes(FakeClient(), gap_quotes, holdings)
+    merged = radar._backfill_holding_quotes(gap_quotes, holdings, quote_fetcher=quote_fetcher)
     assert "600000.SH" in merged
     level_ok, _, body_ok, _, _ = radar.analyze_snapshot_diff(merged, prev_state, {}, holdings, now_ts=1300.0)
     assert level_ok == "L4"
@@ -564,25 +562,20 @@ def test_failed_send_does_not_persist_cooldown_in_run_once(tmp_path, monkeypatch
     monkeypatch.setattr(radar, "load_wyckoff_l2_map", lambda *a, **kw: {})
     monkeypatch.setattr(radar, "resolve_lark_open_id", lambda *a, **kw: "ou_test")
 
-    class FakeClient:
-        def __init__(self, **kw):
-            pass
-
-        def get_quotes(self, universes=None, symbols=None):
-            return {
-                "600000.SH": {
-                    "symbol": "600000.SH",
-                    "last_price": 9.40,
-                    "prev_close": 10.0,
-                    "volume": 1000,
-                    "amount": 9400.0,
-                    "ext": {"name": "浦发银行"},
-                }
+    monkeypatch.setattr(
+        radar,
+        "_spot_quote_map",
+        lambda: {
+            "600000.SH": {
+                "symbol": "600000.SH",
+                "last_price": 9.40,
+                "prev_close": 10.0,
+                "volume": 1000,
+                "amount": 9400.0,
+                "ext": {"name": "浦发银行"},
             }
-
-    import integrations.tickflow_client as tf_mod
-
-    monkeypatch.setattr(tf_mod, "TickFlowClient", FakeClient)
+        },
+    )
     args = SimpleNamespace(
         ignore_hours=True,
         dry_run=False,
@@ -669,16 +662,7 @@ def test_failed_send_keeps_quote_baseline_so_holding_plunge_retries(tmp_path, mo
         },
     }
 
-    class FakeClient:
-        def __init__(self, **kw):
-            pass
-
-        def get_quotes(self, universes=None, symbols=None):
-            return plunge_quotes
-
-    import integrations.tickflow_client as tf_mod
-
-    monkeypatch.setattr(tf_mod, "TickFlowClient", FakeClient)
+    monkeypatch.setattr(radar, "_spot_quote_map", lambda: plunge_quotes)
     args = SimpleNamespace(
         ignore_hours=True,
         dry_run=False,
@@ -719,7 +703,7 @@ def test_daemon_loop_sends_l1_alert_on_third_consecutive_error(monkeypatch):
         nonlocal calls
         calls += 1
         if calls <= 3:
-            raise RuntimeError("TickFlow timeout")
+            raise RuntimeError("spot timeout")
         raise KeyboardInterrupt()
 
     monkeypatch.setattr(radar, "run_once", failing_run_once)
@@ -961,25 +945,20 @@ def test_dry_run_does_not_write_shared_state_file(tmp_path, monkeypatch):
     monkeypatch.setattr(radar, "TURNOVER_DIR", tmp_path / "turnover")
     monkeypatch.setattr(radar, "load_wyckoff_l2_map", lambda *a, **kw: {})
 
-    class FakeClient:
-        def __init__(self, **kw):
-            pass
-
-        def get_quotes(self, universes=None, symbols=None):
-            return {
-                "600000.SH": {
-                    "symbol": "600000.SH",
-                    "last_price": 9.40,
-                    "prev_close": 10.0,
-                    "volume": 1000,
-                    "amount": 9400.0,
-                    "ext": {"name": "浦发银行"},
-                }
+    monkeypatch.setattr(
+        radar,
+        "_spot_quote_map",
+        lambda: {
+            "600000.SH": {
+                "symbol": "600000.SH",
+                "last_price": 9.40,
+                "prev_close": 10.0,
+                "volume": 1000,
+                "amount": 9400.0,
+                "ext": {"name": "浦发银行"},
             }
-
-    import integrations.tickflow_client as tf_mod
-
-    monkeypatch.setattr(tf_mod, "TickFlowClient", FakeClient)
+        },
+    )
     args = SimpleNamespace(
         ignore_hours=True,
         dry_run=True,

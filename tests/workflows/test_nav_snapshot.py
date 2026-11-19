@@ -10,25 +10,23 @@ from workflows.nav_snapshot import NavSnapshotResult, build_nav_snapshot, persis
 
 @pytest.fixture
 def _state(monkeypatch):
-    """把外部依赖收敛成可控替身：Supabase 客户端、组合状态、行情、TickFlow key。"""
+    """把外部依赖收敛成可控替身：Supabase 客户端、组合状态、行情。"""
 
     holder = {
         "positions": [{"code": "600519", "shares": 100}],
         "free_cash": 5_000.0,
         "prices": {"600519": 1_500.0},
         "rates": {"CNY": 1.0},
-        "api_key": "k",
     }
     monkeypatch.setattr("integrations.supabase_base.create_admin_client", lambda: object())
     monkeypatch.setattr(
         "integrations.supabase_portfolio.load_portfolio_state",
         lambda pid, client=None: {"positions": holder["positions"], "free_cash": holder["free_cash"]},
     )
-    monkeypatch.setattr("integrations.supabase_portfolio.portfolio_tickflow_key", lambda pid, client: holder["api_key"])
     holder.setdefault("prev_closes", {"600519": 1_490.0})
     monkeypatch.setattr(
         "integrations.portfolio_market_value.load_portfolio_quote_marks",
-        lambda positions, api_key: (holder["prices"], holder["prev_closes"], holder["rates"]),
+        lambda positions: (holder["prices"], holder["prev_closes"], holder["rates"]),
     )
     return holder
 
@@ -69,11 +67,9 @@ class TestBuildSnapshot:
         assert result.ok is False
         assert "未找到组合" in result.message
 
-    def test_missing_api_key(self, _state):
-        _state["api_key"] = ""
+    def test_needs_no_private_api_key(self, _state):
         result = build_nav_snapshot("USER_LIVE", "2026-08-17")
-        assert result.ok is False
-        assert "TickFlow" in result.message
+        assert result.ok is True
 
     def test_ignores_zero_share_rows(self, _state):
         _state["positions"] = [{"code": "600519", "shares": 0}]

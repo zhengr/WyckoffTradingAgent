@@ -45,7 +45,6 @@ CLOUD_ROW = {
     "anthropic_api_key": "A-KEY",
     "anthropic_model": "claude-4",
     "anthropic_base_url": "",
-    "tickflow_api_key": "TF-KEY",
     "tushare_token": "TS-TOKEN",
 }
 
@@ -124,7 +123,7 @@ class TestCloudConfigPull:
         out = cc.pull_cloud_config("u1", "tok")
         assert out["available"] is True
         assert sorted(out["models"]) == ["claude/claude-4", "gemini/gemini-2.5-pro", "openai/gpt-4o"]
-        assert sorted(out["data_sources"]) == ["tickflow_api_key", "tushare_token"]
+        assert sorted(out["data_sources"]) == ["tushare_token"]
 
     def test_provider_without_key_or_model_is_skipped(self, signed_in, cloud):
         """云端只配了一半（有 key 没 model）不该产出半个条目。"""
@@ -145,11 +144,11 @@ class TestCloudConfigPull:
 
     def test_local_value_wins(self, signed_in, cloud):
         """云端不覆盖本地 —— 否则「我明明改了，重启又变回去」，而且无声。"""
-        la.save_config_key("tickflow_api_key", "LOCAL-TF")
+        la.save_config_key("tushare_token", "LOCAL-TS")
         out = cc.pull_cloud_config("u1", "tok")
         config = json.loads(la.CONFIG_FILE.read_text(encoding="utf-8"))
-        assert config["tickflow_api_key"] == "LOCAL-TF"
-        assert "tickflow_api_key" not in out["data_sources"]
+        assert config["tushare_token"] == "LOCAL-TS"
+        assert "tushare_token" not in out["data_sources"]
 
     def test_local_model_is_not_replaced(self, signed_in, cloud):
         """本地已有同 provider+model 时跳过；不同 model 仍要补上。"""
@@ -233,7 +232,7 @@ class TestCloudConfigPull:
         out = cc.pull_cloud_config("u1", "tok")
         assert out == {"models": [], "data_sources": [], "available": False}
         config = json.loads(la.CONFIG_FILE.read_text(encoding="utf-8")) if la.CONFIG_FILE.exists() else {}
-        assert not config.get("tickflow_api_key")
+        assert not config.get("tushare_token")
         assert not la.load_model_configs()
 
     def test_refuse_merge_after_account_switch_during_fetch(self, signed_in, monkeypatch):
@@ -255,7 +254,7 @@ class TestCloudConfigPull:
         out = cc.pull_cloud_config("u1", "tok")
         assert out == {"models": [], "data_sources": [], "available": False}
         config = json.loads(la.CONFIG_FILE.read_text(encoding="utf-8")) if la.CONFIG_FILE.exists() else {}
-        assert not config.get("tickflow_api_key")
+        assert not config.get("tushare_token")
         assert not any(str(c.get("api_key") or "").startswith(("G-", "O-", "A-")) for c in la.load_model_configs())
 
 
@@ -328,7 +327,6 @@ BOB_ROW = {
     "chat_provider": "openai",
     "openai_api_key": "BOB-O-KEY",
     "openai_model": "gpt-4o",
-    "tickflow_api_key": "BOB-TF-KEY",
     "tushare_token": "BOB-TS-TOKEN",
 }
 
@@ -350,7 +348,7 @@ class TestCloudConfigDoesNotOutliveAccount:
         _switch_session("u2")
 
         config = la.load_config()
-        assert not config.get("tickflow_api_key")
+        assert not config.get("tushare_token")
         assert not config.get("tushare_token")
         assert la.load_model_configs() == []
         assert _local_default_llm_config() is None
@@ -363,32 +361,32 @@ class TestCloudConfigDoesNotOutliveAccount:
         monkeypatch.setattr(cc, "_fetch_settings", lambda *_a: dict(BOB_ROW))
         pulled = cc.pull_cloud_config("u2", "tok")
 
-        assert sorted(pulled["data_sources"]) == ["tickflow_api_key", "tushare_token"]
-        assert la.load_config()["tickflow_api_key"] == "BOB-TF-KEY"
+        assert sorted(pulled["data_sources"]) == ["tushare_token"]
+        assert la.load_config()["tushare_token"] == "BOB-TS-TOKEN"
         assert [c["api_key"] for c in la.load_model_configs()] == ["BOB-O-KEY"]
 
     def test_manual_values_survive_logout(self, signed_in, cloud):
-        la.save_config_key("tickflow_api_key", "MY-TF-KEY")
+        la.save_config_key("manual_data_token", "MANUAL-TOKEN")
         la.save_model_entry({"id": "mine", "provider_name": "openai", "model": "local", "api_key": "MY-KEY"})
 
         cc.pull_cloud_config("u1", "tok")
         la.logout()
 
         config = la.load_config()
-        assert config["tickflow_api_key"] == "MY-TF-KEY"
+        assert config["manual_data_token"] == "MANUAL-TOKEN"
         assert not config.get("tushare_token")
         assert [c["id"] for c in la.load_model_configs()] == ["mine"]
         assert la.load_default_model_id() == "mine"
 
     def test_values_edited_after_pull_survive_logout(self, signed_in, cloud):
         cc.pull_cloud_config("u1", "tok")
-        la.save_config_key("tickflow_api_key", "EDITED-TF")
+        la.save_config_key("manual_data_token", "EDITED-TOKEN")
         edited = next(c for c in la.load_model_configs() if c["provider_name"] == "openai")
         la.save_model_entry({**edited, "api_key": "EDITED-KEY"})
 
         la.logout()
 
-        assert la.load_config()["tickflow_api_key"] == "EDITED-TF"
+        assert la.load_config()["manual_data_token"] == "EDITED-TOKEN"
         assert [c["api_key"] for c in la.load_model_configs()] == ["EDITED-KEY"]
 
     def test_default_and_fallback_do_not_dangle(self, signed_in, cloud):
@@ -405,15 +403,11 @@ class TestCloudConfigDoesNotOutliveAccount:
         assert la.load_fallback_model_id() == ""
 
     def test_logout_drops_seeded_env_but_not_foreign_env(self, signed_in, cloud, monkeypatch):
-        monkeypatch.delenv("TICKFLOW_API_KEY", raising=False)
         monkeypatch.setenv("TUSHARE_TOKEN", "FROM-SHELL")
         cc.pull_cloud_config("u1", "tok")
         la.seed_data_source_env()
-        assert os.environ["TICKFLOW_API_KEY"] == "TF-KEY"
-
         la.logout()
 
-        assert "TICKFLOW_API_KEY" not in os.environ
         assert os.environ["TUSHARE_TOKEN"] == "FROM-SHELL"
 
     def test_login_as_another_account_purges_without_logout(self, signed_in, cloud, monkeypatch):
@@ -426,7 +420,7 @@ class TestCloudConfigDoesNotOutliveAccount:
 
         la.login("b@b.c", "pw")
 
-        assert not la.load_config().get("tickflow_api_key")
+        assert not la.load_config().get("tushare_token")
         assert la.load_model_configs() == []
 
     def test_login_as_same_account_keeps_keys(self, signed_in, cloud, monkeypatch):
@@ -439,14 +433,14 @@ class TestCloudConfigDoesNotOutliveAccount:
 
         la.login("a@b.c", "pw")
 
-        assert la.load_config()["tickflow_api_key"] == "TF-KEY"
+        assert la.load_config()["tushare_token"] == "TS-TOKEN"
         assert len(la.load_model_configs()) == 3
 
     def test_cloud_write_refuses_after_logout(self, signed_in):
         """Disk-identity CAS inside save_cloud_*: logout clears session before purge."""
         la.logout()
-        la.save_cloud_data_source("u1", "tickflow_api_key", "LATE-TF")
-        assert not la.load_config().get("tickflow_api_key")
+        la.save_cloud_data_source("u1", "tushare_token", "LATE-TS")
+        assert not la.load_config().get("tushare_token")
 
     def test_cloud_write_refuses_after_account_switch_mid_merge(self, signed_in, cloud, monkeypatch):
         """IPC race: Alice merge stalls in save_cloud_*; Bob login must win."""
@@ -477,14 +471,11 @@ class TestCloudConfigDoesNotOutliveAccount:
 
         cfg = la.load_config()
         assert la.load_session()["user_id"] == "u2"
-        assert not cfg.get("tickflow_api_key"), f"Alice key leaked: {cfg.get('tickflow_api_key')}"
-        assert not any(
-            str(c.get("api_key") or "").startswith(("G-", "O-", "A-", "TF-")) for c in la.load_model_configs()
-        )
+        assert not cfg.get("tushare_token"), f"Alice key leaked: {cfg.get('tushare_token')}"
+        assert not any(str(c.get("api_key") or "").startswith(("G-", "O-", "A-")) for c in la.load_model_configs())
 
     def test_keys_pulled_before_upgrade_are_adopted_by_owner(self, signed_in, cloud):
         """升级前拉的值没有来源记录：下次拉取值相同才认领，不同的不动。"""
-        la.save_config_key("tickflow_api_key", "TF-KEY")
         la.save_config_key("tushare_token", "TYPED-BY-HAND")
         la.save_model_entry(
             {
@@ -499,6 +490,5 @@ class TestCloudConfigDoesNotOutliveAccount:
         la.logout()
 
         config = la.load_config()
-        assert not config.get("tickflow_api_key")
         assert config["tushare_token"] == "TYPED-BY-HAND"
         assert la.load_model_configs() == []

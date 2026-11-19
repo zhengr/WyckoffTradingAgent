@@ -245,7 +245,7 @@ zh:{
   view:'查看',back:'返回列表',session:'会话',no_messages:'暂无消息',
   no_recs:'暂无复盘记录',no_signals:'暂无信号',
   confirm_del_rec:'确认删除复盘记录：',confirm_del_sig:'确认删除信号记录：',confirm_del_session:'确认删除整个会话？会话 ID：',
-  buy_links:'购买 API Key',buy_tickflow:'数据源（TickFlow）',buy_llm:'大模型（1Route）',
+  buy_links:'购买 API Key',buy_llm:'大模型（1Route）',
   tab_content:'内容',tab_runtime:'调用链',no_runtime:'无调用链数据（需重新对话后可见）',
 },
 en:{
@@ -273,7 +273,7 @@ en:{
   view:'VIEW',back:'Back to sessions',session:'Session',no_messages:'No messages',
   no_recs:'No recommendations',no_signals:'No signals',
   confirm_del_rec:'Delete recommendation: ',confirm_del_sig:'Delete signal: ',confirm_del_session:'Delete entire session? ID: ',
-  buy_links:'Get API Keys',buy_tickflow:'Data Source (TickFlow)',buy_llm:'LLM API (1Route)',
+  buy_links:'Get API Keys',buy_llm:'LLM API (1Route)',
   tab_content:'Content',tab_runtime:'Runtime',no_runtime:'No runtime data (available after new conversations)',
 }};
 let _lang = localStorage.getItem('wk_lang') || 'zh';
@@ -344,15 +344,14 @@ async function renderOverview(c){
     </div>`;
   // --- purchase links ---
   html+=`<div class="card fade-in" style="margin-top:12px;animation-delay:.05s"><div class="card-title">${t('buy_links')}</div><div style="display:flex;gap:12px;flex-wrap:wrap">
-    <a href="https://tickflow.org/auth/register?ref=5N4NKTCPL4" target="_blank" rel="noopener" class="btn-accent" style="text-decoration:none">🔗 ${t('buy_tickflow')}</a>
     <a href="https://www.1route.dev/register?aff=359904261" target="_blank" rel="noopener" class="btn-accent" style="text-decoration:none;border-color:#a78bfa;color:#a78bfa">🔗 ${t('buy_llm')}</a>
   </div></div>`;
   // --- data source + timeout config ---
-  const secretKeys=['tushare_token','tickflow_api_key'];
+  const secretKeys=['tushare_token'];
   const timeoutKeys=['stream_chunk_timeout_seconds','tool_timeout_seconds'];
   const editableKeys=[...secretKeys,...timeoutKeys];
   html+=`<div class="card fade-in" style="margin-top:12px;animation-delay:.1s"><div class="card-title">${t('ds_config')}</div><div style="font-size:11px;color:var(--text-dim);margin-bottom:10px">${t('timeout_hint')}</div>`;
-  const keys=Object.entries(cfg).filter(([k])=>k!=='models'&&k!=='default'&&k!=='fallback'&&k!=='light'&&k!=='email'&&k!=='password'&&k!=='theme');
+  const keys=Object.entries(cfg).filter(([k])=>k!=='models'&&k!=='default'&&k!=='fallback'&&k!=='light'&&k!=='email'&&k!=='password'&&k!=='theme'&&!k.startsWith('tushare'));
   // Ensure timeout keys always appear even if somehow missing from API payload.
   timeoutKeys.forEach(k=>{if(!keys.some(([kk])=>kk===k))keys.push([k,cfg[k]??''])});
   if(keys.length){keys.forEach(([k,v])=>{
