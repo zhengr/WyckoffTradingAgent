@@ -2,6 +2,7 @@ export const DEFAULT_WORKER_ORIGIN = 'https://wyckoff-api.yongkai-wang.workers.d
 
 export const WORKER_PROXY_PREFIXES = [
   '/api/chat',
+  '/api/kline',
   '/api/settings',
   '/api/portfolio',
   '/api/shadow-ledger',

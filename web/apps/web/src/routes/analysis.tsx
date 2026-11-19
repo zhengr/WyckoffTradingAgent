@@ -379,7 +379,7 @@ function KlineSection({ symbol, name, klineData, dataQuality, compact = false, o
 }
 
 function DataQualityBadge({ quality }: { quality: KlineDataQuality }) {
-  const source = quality.source === 'tickflow' ? 'TickFlow' : quality.source === 'tushare' ? 'Tushare' : quality.source === 'mixed' ? '多源' : '无来源'
+  const source = quality.source === 'tickflow' ? 'TickFlow' : quality.source === 'tushare' ? 'Tushare' : quality.source === 'tencent' ? '腾讯' : quality.source === 'sina' ? '新浪' : quality.source === 'mixed' ? '多源' : '无来源'
   const coverage = quality.coverageStart && quality.coverageEnd ? `${quality.coverageStart} 至 ${quality.coverageEnd}` : '无覆盖区间'
   return (
     <span title={`来源：${source}；覆盖：${coverage}；最新交易日：${quality.latestTradingDate || '未知'}`} className={`rounded-full border px-2.5 py-1 text-xs ${quality.isComplete ? 'border-border text-muted-foreground' : 'border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200'}`}>

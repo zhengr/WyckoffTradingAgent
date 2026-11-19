@@ -165,6 +165,24 @@ export async function getUserDataKeys(userId: string): Promise<{ tickflow: strin
   }
 }
 
+export async function fetchKlineViaServerApi(
+  code: string,
+  startCompact: string,
+  endCompact: string,
+  adjust: 'qfq' | 'hfq' | '' = 'qfq',
+): Promise<{ data: KlineRow[]; source: string } | null> {
+  try {
+    const params = new URLSearchParams({ code, start: startCompact, end: endCompact, adjust })
+    const resp = await fetch(`/api/kline?${params}`)
+    if (!resp.ok) return null
+    const payload = (await resp.json()) as { data?: KlineRow[]; source?: string }
+    if (!Array.isArray(payload.data) || !payload.data.length) return null
+    return { data: payload.data, source: String(payload.source || 'server') }
+  } catch {
+    return null
+  }
+}
+
 export async function fetchKlineWithQuality(
   code: string,
   keys: { tickflow: string | null; tushare: string | null },
@@ -191,6 +209,16 @@ export async function fetchKlineWithQuality(
         return { data, quality: buildKlineDataQuality('tushare', 320, data, Boolean(keys.tickflow)) }
       }
     } catch { /* fallthrough */ }
+  }
+  // 服务端代理回退：Worker 直连腾讯/新浪，不依赖用户本地 TickFlow/Tushare 配置
+  if (isCn) {
+    const serverHit = await fetchKlineViaServerApi(code, fmtCompact(start), fmtCompact(end), 'qfq')
+    if (serverHit && serverHit.data.length) {
+      const data = serverHit.data.slice(-320)
+      const src = serverHit.source === 'sina' ? 'sina' : 'tencent'
+      if (tickflowError) console.warn(`[kline] TickFlow/Tushare failed for ${code}, falling back to ${src}:`, tickflowError.message)
+      return { data, quality: buildKlineDataQuality(src, 320, data, Boolean(keys.tickflow || keys.tushare)) }
+    }
   }
   if (tickflowError) throw tickflowError
   const suffixHint = isCn ? '' : '美股/港股请使用 TickFlow 标准代码（如 AAPL.US / 00700.HK）。'

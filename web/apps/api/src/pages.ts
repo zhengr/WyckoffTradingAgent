@@ -1,5 +1,6 @@
 import { createApiApp } from './app'
 import { chatRoutes } from './routes/chat'
+import { klineRoutes } from './routes/kline'
 import { portfolioRoutes } from './routes/portfolio'
 import { settingsRoutes } from './routes/settings'
 import { shadowLedgerRoutes } from './routes/shadow-ledger'
@@ -9,6 +10,7 @@ import { shadowLedgerRoutes } from './routes/shadow-ledger'
 const app = createApiApp()
 
 app.route('/api/chat', chatRoutes)
+app.route('/api/kline', klineRoutes)
 app.route('/api/portfolio', portfolioRoutes)
 app.route('/api/settings', settingsRoutes)
 app.route('/api/shadow-ledger', shadowLedgerRoutes)

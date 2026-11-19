@@ -67,7 +67,7 @@ export interface LLMToolConfig {
   base_url: string
 }
 
-export type KlineDataSource = 'tickflow' | 'tushare' | 'mixed' | 'none'
+export type KlineDataSource = 'tickflow' | 'tushare' | 'tencent' | 'sina' | 'mixed' | 'none'
 
 export interface KlineDataQuality {
   source: KlineDataSource
@@ -111,7 +111,7 @@ export const ANALYZE_STOCK_OUTPUT_SCHEMA = z.object({
   data_source: z.string().nullable().optional(),
   data_asof: z.string().nullable().optional(),
   data_quality: z.object({
-    source: z.enum(['tickflow', 'tushare', 'mixed', 'none']),
+    source: z.enum(['tickflow', 'tushare', 'tencent', 'sina', 'mixed', 'none']),
     latestTradingDate: z.string().nullable(),
     coverageStart: z.string().nullable(),
     coverageEnd: z.string().nullable(),
