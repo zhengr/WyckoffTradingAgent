@@ -539,7 +539,7 @@ function membershipRequiredText(feature: string): string {
 }
 
 // 公开的 A 股名单（随前端一起发布），不是推荐内容：recommendation_tracking 收紧到会员后，非会员按名字搜股靠它。
-const STOCK_UNIVERSE_URL = 'https://wyckoff-analysis.pages.dev/market-data/stock_list_cache.json'
+const STOCK_UNIVERSE_URL = 'https://wyckoff-analysis-dyj.pages.dev/market-data/stock_list_cache.json'
 const STOCK_UNIVERSE_TTL_MS = 6 * 60 * 60 * 1000
 type StockNameRow = { code: string; name: string }
 let stockUniverse: { at: number; rows: StockNameRow[] } | null = null

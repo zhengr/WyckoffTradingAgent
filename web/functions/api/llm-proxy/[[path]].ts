@@ -9,13 +9,25 @@ const ALLOWED_ORIGINS = new Set([
   'http://localhost:5173',
   'http://127.0.0.1:5173',
 ])
+
+// 与 web/apps/api/src/app.ts 的 isAllowedCorsOrigin 一致：允许任意 *.pages.dev 部署域名
+// （自建 fork 的 Pages 项目会带随机后缀，如 wyckoff-analysis-dyj.pages.dev）。
+// 安全边界仍由 X-Target-URL 上游白名单（ALLOWED_PROXY_TARGET_ORIGINS）兜底。
+function isAllowedProxyOrigin(origin: string): boolean {
+  if (ALLOWED_ORIGINS.has(origin)) return true
+  try {
+    return new URL(origin).hostname.endsWith('.pages.dev')
+  } catch {
+    return false
+  }
+}
 const ALLOWED_METHODS = new Set(['GET', 'POST', 'OPTIONS'])
 const MAX_BODY_BYTES = 2 * 1024 * 1024
 const UPSTREAM_TIMEOUT_MS = 60_000
 
 function corsHeaders(origin: string | null): Record<string, string> {
   return {
-    ...(origin && ALLOWED_ORIGINS.has(origin) ? { 'Access-Control-Allow-Origin': origin, Vary: 'Origin' } : {}),
+    ...(origin && isAllowedProxyOrigin(origin) ? { 'Access-Control-Allow-Origin': origin, Vary: 'Origin' } : {}),
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
     'Access-Control-Allow-Headers': 'authorization, content-type, accept, x-api-key, anthropic-version, x-target-url',
   'Access-Control-Max-Age': '86400',
@@ -86,7 +98,7 @@ export const onRequest: PagesFunction = async (context) => {
   const origin = request.headers.get('Origin')
   const cors = corsHeaders(origin)
 
-  if (origin && !ALLOWED_ORIGINS.has(origin)) {
+  if (origin && !isAllowedProxyOrigin(origin)) {
     return Response.json({ error: 'Origin is not allowed' }, { status: 403 })
   }
   if (!ALLOWED_METHODS.has(request.method)) {
