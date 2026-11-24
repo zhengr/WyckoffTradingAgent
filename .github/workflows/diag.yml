@@ -1,0 +1,19 @@
+name: diag verify
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  v:
+    runs-on: ubuntu-latest
+    steps:
+      - name: bse+us
+        run: |
+          W=https://wyckoff-api.zhengr.workers.dev
+          echo "--- BSE ---"
+          curl -sS --max-time 40 "$W/api/kline?code=920029&start=20261110&end=20261118" ; echo
+          echo "--- US ---"
+          curl -sS --max-time 40 "$W/api/kline?code=AAPL.US&start=20261110&end=20261118&adjust=qfq" ; echo
