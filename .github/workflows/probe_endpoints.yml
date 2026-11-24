@@ -1,0 +1,34 @@
+name: Probe all data endpoints
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Probe worker endpoints
+        run: |
+          BASE=https://wyckoff-analysis-dyj.pages.dev
+          W=https://wyckoff-api.zhengr.workers.dev
+          echo "=== /api/kline A股 600519 ==="
+          curl -sS --max-time 30 "$W/api/kline?code=600519&start=20261110&end=20261118" | head -c 150; echo
+          echo "=== /api/kline BSE 920029 ==="
+          curl -sS --max-time 30 "$W/api/kline?code=920029&start=20261110&end=20261118" -o /tmp/b.json -w 'status=%{http_code}\n'
+          head -c 250 /tmp/b.json; echo
+          echo "=== /api/kline HK 00700 ==="
+          curl -sS --max-time 30 "$W/api/kline?code=00700&start=20261110&end=20261118" -o /tmp/h.json -w 'status=%{http_code}\n'
+          head -c 250 /tmp/h.json; echo
+          echo "=== /api/kline US AAPL.US ==="
+          curl -sS --max-time 30 "$W/api/kline?code=AAPL.US&start=20261110&end=20261118" -o /tmp/u.json -w 'status=%{http_code}\n'
+          head -c 250 /tmp/u.json; echo
+          echo "=== /api/quote 600519 ==="
+          curl -sS --max-time 30 "$W/api/quote?code=600519" -o /tmp/q.json -w 'status=%{http_code}\n'
+          head -c 250 /tmp/q.json; echo
+          echo "=== /api/kline ETF 510300 ==="
+          curl -sS --max-time 30 "$W/api/kline?code=510300&start=20261110&end=20261118" -o /tmp/e.json -w 'status=%{http_code}\n'
+          head -c 200 /tmp/e.json; echo
