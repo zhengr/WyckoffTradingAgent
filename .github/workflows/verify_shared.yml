@@ -1,0 +1,41 @@
+name: Verify agent kline via shared
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  v:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: Bundle shared
+        run: |
+          cd web
+          npm i -g esbuild > /dev/null 2>&1
+          esbuild packages/shared/src/index.ts --bundle --format=esm --platform=node --outfile=/tmp/shared.mjs --external:@supabase/supabase-js --external:ai --external:zod 2>&1 | tail -3
+          echo "bundle done: $(wc -c < /tmp/shared.mjs) bytes"
+      - name: Test agent fetch
+        run: |
+          cat > /tmp/test.mjs << 'EOF'
+          import { fetchKlineForAgentWithQuality } from '/tmp/shared.mjs';
+          // mock deps: fetch 转发到真实 Worker /api/kline；tushare 直接失败（模拟无权限）
+          const BASE = 'https://wyckoff-api.zhengr.workers.dev';
+          const deps = {
+            fetch: async (url, init) => {
+              const u = String(url);
+              if (u.includes('/api/llm-proxy')) return new Response(JSON.stringify({code:-1}), {status:200}); // tushare 强制失败
+              return globalThis.fetch(u, init);
+            },
+          };
+          for (const code of ['920029', 'AAPL.US', '600519']) {
+            const r = await fetchKlineForAgentWithQuality(deps, code, {tushare: 'dummy'}, 'u');
+            console.log(code, '-> rows:', r.rows.length, 'source:', r.quality.source, 'latest:', r.quality.latestTradingDate);
+          }
+          EOF
+          node /tmp/test.mjs
