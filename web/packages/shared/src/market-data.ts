@@ -30,6 +30,7 @@ const TENCENT_MKLINE = 'https://ifzq.gtimg.cn/appstock/app/kline/mkline'
 const TENCENT_MINUTE = 'https://web.ifzq.gtimg.cn/appstock/app/minute/query'
 const TENCENT_QUOTE = 'https://qt.gtimg.cn/q='
 const SINA_KLINE = 'https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/CN_MarketData.getKLineData'
+const YAHOO_CHART = 'https://query1.finance.yahoo.com/v8/finance/chart/{symbol}'
 const EM_KLINE = 'https://push2his.eastmoney.com/api/qt/stock/kline/get?secid={secid}&fields1=f1,f2,f3&fields2=f51,f52,f53,f54,f55,f56&klt=101&fqt={fqt}&beg={beg}&end={end}'
 
 const UPSTREAM_HEADERS = {
@@ -156,15 +157,25 @@ export async function fetchServerKline(
   code: string, start: string, end: string, adjust = 'qfq', fetcher: Fetcher = globalThis.fetch,
 ): Promise<{ data: ServerKlineRow[]; source: 'tencent' | 'sina' | 'ths' | 'eastmoney' } | null> {
   const resolved = resolveServerSymbol(code)
-  // 北交所 / 美股：腾讯在这些市场返回空或被数据中心 IP 拒绝，走东财 push2his
-  if (resolved?.symbol.startsWith('bj') || resolved?.kind === 'us') {
+  // 北交所：腾讯/新浪无数据，走东财 push2his（0.xxxxxx，Worker 出口可达）
+  if (resolved?.symbol.startsWith('bj')) {
     try {
       const rows = await fetchThsKline(code, start, end, fetcher)
-      if (rows.length) return { data: rows.slice(-320), source: resolved.kind === 'us' ? 'eastmoney' : 'ths' }
+      if (rows.length) return { data: rows.slice(-320), source: 'ths' }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
-      if (typeof console !== 'undefined') console.warn('[market-data] em kline failed:', msg)
-      throw new Error(`em kline: ${msg}`)
+      throw new Error(`em bse: ${msg}`)
+    }
+    return null
+  }
+  // 美股：腾讯/东财在 CF 数据中心出口被拒（501/520），走 Yahoo Finance（海外源稳定可达）
+  if (resolved?.kind === 'us') {
+    try {
+      const rows = await fetchYahooKline(code, start, end, fetcher)
+      if (rows.length) return { data: rows.slice(-320), source: 'eastmoney' }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      throw new Error(`yahoo us: ${msg}`)
     }
     return null
   }
@@ -254,6 +265,37 @@ async function fetchThsKline(code: string, start: string, end: string, fetcher: 
     }
     return out.sort((a, b) => a.date.localeCompare(b.date))
   })()
+}
+
+/** Yahoo Finance chart：美股日线（海外源，CF 出口可达）。timestamp 秒 + indicators.quote OHLCV。 */
+async function fetchYahooKline(code: string, start: string, end: string, fetcher: Fetcher): Promise<ServerKlineRow[]> {
+  const resolved = resolveServerSymbol(code)
+  if (!resolved || resolved.kind !== 'us') return []
+  const symbol = resolved.code.replace('.US', '')
+  const period1 = Math.floor(new Date(`${start.slice(0, 4)}-${start.slice(4, 6)}-${start.slice(6, 8)}T00:00:00Z`).getTime() / 1000)
+  const period2 = Math.floor(new Date(`${end.slice(0, 4)}-${end.slice(4, 6)}-${end.slice(6, 8)}T23:59:59Z`).getTime() / 1000)
+  const url = `${YAHOO_CHART.replace('{symbol}', encodeURIComponent(symbol))}?period1=${period1}&period2=${period2}&interval=1d`
+  const payload = (await getJson(url, fetcher)) as {
+    chart?: { result?: Array<{ timestamp?: number[]; indicators?: { quote?: Array<{ open?: number[]; high?: number[]; low?: number[]; close?: number[]; volume?: number[] }> } }> | null }
+  }
+  const result = payload.chart?.result?.[0]
+  const ts = result?.timestamp || []
+  const q = result?.indicators?.quote?.[0]
+  if (!q) return []
+  const out: ServerKlineRow[] = []
+  for (let i = 0; i < ts.length; i++) {
+    const close = q.close?.[i]
+    if (!(close != null && close > 0)) continue
+    out.push({
+      date: new Date(ts[i]! * 1000).toISOString().slice(0, 10),
+      open: q.open?.[i] ?? close,
+      high: q.high?.[i] ?? close,
+      low: q.low?.[i] ?? close,
+      close,
+      volume: q.volume?.[i] ?? 0,
+    })
+  }
+  return out
 }
 
 export async function fetchServerQuotes(codes: string[], fetcher: Fetcher = globalThis.fetch): Promise<Record<string, ServerQuote>> {

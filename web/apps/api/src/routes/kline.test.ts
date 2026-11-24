@@ -129,12 +129,15 @@ describe('kline route', () => {
   it('returns US rows from tencent fqkline without date range', async () => {
     const fetchMock = vi.fn(async (input: string | URL | Request) => {
       const url = String(input)
-      if (url.includes('push2his.eastmoney.com') && url.includes('105.AAPL')) {
+      if (url.includes('query1.finance.yahoo.com') && url.includes('AAPL')) {
         return jsonResponse({
-          data: { code: 'AAPL', klines: [
-            '2026-11-10,351.08,348.24,353.60,346.19,29756060',
-            '2026-11-18,351.94,352.45,356.00,350.00,58588703',
-          ] },
+          chart: { result: [{
+            timestamp: [1762732800, 1763424000],
+            indicators: { quote: [{
+              open: [351.08, 351.94], high: [353.60, 356.00], low: [346.19, 350.00],
+              close: [348.24, 352.45], volume: [29756060, 58588703],
+            }] },
+          }] },
         })
       }
       throw new Error('unexpected upstream')
