@@ -274,21 +274,22 @@ async function fetchKlineViaTushare(deps: ToolDeps, code: string, token: string,
   const items = dailyJson?.data?.items
   if (!Array.isArray(items) || items.length === 0) return []
 
+  // 北交所/新股常无复权因子（或接口限频返回空）：按不复权处理，不丢弃行
   const adjItems = adjJson?.data?.items
-  if (!Array.isArray(adjItems) || adjItems.length === 0) return []
   const adjMap = new Map<string, number>()
   let latestDate = ''
-  for (const row of adjItems) {
-    const dt = String(row[0])
-    adjMap.set(dt, Number(row[1]))
-    if (dt > latestDate) latestDate = dt
+  if (Array.isArray(adjItems) && adjItems.length > 0) {
+    for (const row of adjItems) {
+      const dt = String(row[0])
+      adjMap.set(dt, Number(row[1]))
+      if (dt > latestDate) latestDate = dt
+    }
   }
   const latestFactor = adjMap.get(latestDate) || 1
 
   return items.map(row => {
     const dt = String(row[0] || '')
-    const factor = adjMap.get(dt)
-    if (!factor) return null
+    const factor = adjMap.get(dt) || latestFactor
     const ratio = factor / latestFactor
     return {
       date: dt.replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3'),

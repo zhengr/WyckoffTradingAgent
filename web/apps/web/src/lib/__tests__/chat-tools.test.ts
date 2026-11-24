@@ -1116,15 +1116,12 @@ describe('execAnalyzeStock', () => {
       .mockResolvedValue({
         ok: true,
         json: () => Promise.resolve({
-          code: 0,
-          data: {
-            usAAPL: {
-              day: [
-                ['2026-11-17', '100', '101', '102', '99', '1000'],
-                ['2026-11-18', '101', '102', '103', '100', '1200'],
-              ],
-            },
-          },
+          chart: { result: [{
+            timestamp: [1763328000, 1763414400],
+            indicators: { quote: [{
+              open: [100, 101], high: [102, 103], low: [99, 100], close: [101, 102], volume: [1000, 1200],
+            }] },
+          }] },
         }),
       })
     deps.fetch = fetchMock as unknown as ToolDeps['fetch']
@@ -1139,7 +1136,7 @@ describe('execAnalyzeStock', () => {
     )
 
     expect(result.markdown).toBe('mocked LLM response')
-    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('usAAPL'), expect.anything())
+    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('yahoo'), expect.anything())
   })
 
   it('uses Tushare kline when a token is configured', async () => {
