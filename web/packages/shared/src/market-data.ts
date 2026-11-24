@@ -78,6 +78,17 @@ async function getJson(url: string, fetcher: Fetcher): Promise<unknown> {
   return resp.json()
 }
 
+/** 同花顺返回 JSONP（quotebridge_v6_line_hs_xxx_01_yyy( {...} )），剥壳后解析。 */
+async function getThsJson(url: string, fetcher: Fetcher): Promise<Record<string, unknown>> {
+  const resp = await fetcher(url, { headers: UPSTREAM_HEADERS, signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS) })
+  if (!resp.ok) throw new Error(`upstream http ${resp.status}`)
+  const text = await resp.text()
+  const start = text.indexOf('(')
+  const end = text.lastIndexOf(')')
+  if (start === -1 || end <= start) throw new Error('ths jsonp format unexpected')
+  return JSON.parse(text.slice(start + 1, end)) as Record<string, unknown>
+}
+
 export async function fetchTencentKline(
   code: string, start: string, end: string, adjust: string, fetcher: Fetcher = globalThis.fetch,
 ): Promise<ServerKlineRow[]> {
@@ -210,35 +221,39 @@ export async function fetchServerIntraday(code: string, period: '1m' | '5m' | '1
 }
 
 /** Batch realtime quotes via Tencent qt.gtimg.cn. Keyed by requested codes and symbols. */
-/** 同花顺日线（北交所 hs_ 前缀）：JSONP 包裹，data="date,open,high,low,close,volume,amount,amp,..." 分号分隔。 */
+/** 同花顺日线（北交所 hs_ 前缀）：JSONP 包裹，按年文件取，data="date,open,high,low,close,volume,amount,amp,..." 分号分隔。 */
 async function fetchThsKline(code: string, start: string, end: string, fetcher: Fetcher): Promise<ServerKlineRow[]> {
   const resolved = resolveServerSymbol(code)
   if (!resolved || resolved.kind !== 'cn') return []
   const symbol = `hs_${resolved.code}`
-  const raw = await getJson(
-    THS_KLINE.replace('{symbol}', symbol).replace('{tail}', 'last.js'),
-    fetcher,
-  ) as Record<string, unknown>
-  const dataStr = String((raw as Record<string, unknown>).data || '')
-  if (!dataStr) return []
   const startNum = start
   const endNum = end
+  const startYear = Number(start.slice(0, 4))
+  const endYear = Number(end.slice(0, 4))
   const out: ServerKlineRow[] = []
-  for (const row of dataStr.split(';')) {
-    const f = row.split(',')
-    if (f.length < 7) continue
-    const dateNum = f[0]!.trim()
-    if (dateNum < startNum || dateNum > endNum) continue
-    const close = Number(f[4])
-    if (!(close > 0)) continue
-    out.push({
-      date: `${dateNum.slice(0, 4)}-${dateNum.slice(4, 6)}-${dateNum.slice(6, 8)}`,
-      open: Number(f[1]),
-      high: Number(f[2]),
-      low: Number(f[3]),
-      close,
-      volume: Number(f[5]),
-    })
+  for (let y = startYear; y <= endYear; y++) {
+    const raw = await getThsJson(
+      THS_KLINE.replace('{symbol}', symbol).replace('{tail}', `${y}.js`),
+      fetcher,
+    ) as Record<string, unknown>
+    const dataStr = String((raw as Record<string, unknown>).data || '')
+    if (!dataStr) continue
+    for (const row of dataStr.split(';')) {
+      const f = row.split(',')
+      if (f.length < 7) continue
+      const dateNum = f[0]!.trim()
+      if (dateNum < startNum || dateNum > endNum) continue
+      const close = Number(f[4])
+      if (!(close > 0)) continue
+      out.push({
+        date: `${dateNum.slice(0, 4)}-${dateNum.slice(4, 6)}-${dateNum.slice(6, 8)}`,
+        open: Number(f[1]),
+        high: Number(f[2]),
+        low: Number(f[3]),
+        close,
+        volume: Number(f[5]),
+      })
+    }
   }
   return out.sort((a, b) => a.date.localeCompare(b.date))
 }

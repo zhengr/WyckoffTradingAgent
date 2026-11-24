@@ -107,10 +107,11 @@ describe('kline route', () => {
         throw new Error('sina no BSE')
       }
       if (url.includes('10jqka.com.cn')) {
-        return jsonResponse({
+        const payload = JSON.stringify({
           name: '开发科技',
           data: '20261117,30.21,30.45,30.50,29.90,3265374,237885270.00,2.416;20261118,30.00,30.00,27.98,28.16,8201700,231162100.00,6.84',
         })
+        return new Response(`quotebridge_v6_line_hs_920029_01_2026(${payload})`, { status: 200, headers: { 'Content-Type': 'text/javascript' } })
       }
       throw new Error('unexpected upstream ' + url)
     })
@@ -136,7 +137,7 @@ describe('kline route', () => {
           code: 0,
           data: {
             usAAPL: {
-              qfqday: [
+              day: [
                 ['2026-11-10', '350.00', '348.50', '352.00', '347.00', '50000000.000'],
                 ['2026-11-18', '351.94', '352.45', '356.00', '350.00', '58588703.000'],
               ],
