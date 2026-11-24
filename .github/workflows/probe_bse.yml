@@ -1,0 +1,38 @@
+name: Probe BSE kline sources
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+      - name: Install requests
+        run: pip install -q requests
+      - name: Probe BSE
+        run: |
+          python - << 'EOF'
+          import requests
+          H = {'User-Agent': 'Mozilla/5.0'}
+          urls = [
+            ("ths_bj", "https://d.10jqka.com.cn/v6/line/bj_920029/01/20261118.js"),
+            ("ths_bj_all", "https://d.10jqka.com.cn/v6/line/bj_920029/01/last.js"),
+            ("ths_bj_hs", "https://d.10jqka.com.cn/v6/line/hs_920029/01/last.js"),
+            ("sina_bj2", "https://quotes.sina.cn/cn/api/jsonp_v2.php/x/CN_MarketDataService.getKLineData?symbol=bj920029&scale=240&ma=no&datalen=20"),
+            ("em_bj", "https://push2his.eastmoney.com/api/qt/stock/kline/get?secid=0.920029&fields1=f1&fields2=f51,f52,f53,f54,f55,f56&klt=101&fqt=1&beg=20261110&end=20261118"),
+            ("tencent_bj_min", "https://web.ifzq.gtimg.cn/appstock/app/minute/query?code=bj920029"),
+            ("baidu_bj", "https://finance.pae.baidu.com/vapi/v1/getquotation?srcid=5353&all=1&code=920029&is_kc=0&stock_type=ab"),
+          ]
+          for name, url in urls:
+            try:
+              r = requests.get(url, timeout=15, headers=H)
+              print(f"{name}: {r.status_code} {r.text[:180]}")
+            except Exception as e:
+              print(f"{name}: FAIL {type(e).__name__} {str(e)[:60]}")
+          EOF
