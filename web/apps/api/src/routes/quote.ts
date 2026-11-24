@@ -5,7 +5,7 @@ import { fetchServerQuotes } from '@wyckoff/shared'
 export const quoteRoutes = new Hono()
 
 quoteRoutes.get('/', async (c) => {
-  const symbols = String(c.req.query('symbols') || '')
+  const symbols = String(c.req.query('symbols') || c.req.query('code') || '')
     .split(',')
     .map((s) => s.trim().toUpperCase())
     .filter(Boolean)

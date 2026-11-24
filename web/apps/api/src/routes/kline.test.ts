@@ -96,4 +96,66 @@ describe('kline route', () => {
     )
     expect(res.status).toBe(502)
   })
+
+  it('returns BSE rows from ths when tencent/sina have none', async () => {
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      const url = String(input)
+      if (url.includes('ifzq.gtimg.cn')) {
+        return jsonResponse({ code: 0, data: { bj920029: { day: [] } } })
+      }
+      if (url.includes('sina.com.cn')) {
+        throw new Error('sina no BSE')
+      }
+      if (url.includes('10jqka.com.cn')) {
+        return jsonResponse({
+          name: '开发科技',
+          data: '20261117,30.21,30.45,30.50,29.90,3265374,237885270.00,2.416;20261118,30.00,30.00,27.98,28.16,8201700,231162100.00,6.84',
+        })
+      }
+      throw new Error('unexpected upstream ' + url)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const res = await klineRoutes.fetch(
+      makeReq({ code: '920029', start: '20261110', end: '20261118' }),
+    )
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as { data: Array<Record<string, number | string>>; source: string }
+    expect(body.source).toBe('ths')
+    expect(body.data).toHaveLength(2)
+    expect(body.data[1].close).toBeCloseTo(28.16)
+    expect(body.data[1].date).toBe('2026-11-18')
+  })
+
+  it('returns US rows from tencent fqkline without date range', async () => {
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      const url = String(input)
+      if (url.includes('fqkline') && url.includes('usAAPL')) {
+        // 带日期会空，这里模拟"最近N根"模式的数据
+        return jsonResponse({
+          code: 0,
+          data: {
+            usAAPL: {
+              qfqday: [
+                ['2026-11-10', '350.00', '348.50', '352.00', '347.00', '50000000.000'],
+                ['2026-11-18', '351.94', '352.45', '356.00', '350.00', '58588703.000'],
+              ],
+            },
+          },
+        })
+      }
+      throw new Error('unexpected upstream')
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const res = await klineRoutes.fetch(
+      makeReq({ code: 'AAPL.US', start: '20261110', end: '20261118', adjust: 'qfq' }),
+    )
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as { data: Array<Record<string, number | string>>; source: string }
+    expect(body.source).toBe('tencent')
+    expect(body.data).toHaveLength(2)
+    expect(body.data[1].close).toBeCloseTo(352.45)
+  })
+
 })

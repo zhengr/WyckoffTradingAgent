@@ -30,6 +30,7 @@ const TENCENT_MKLINE = 'https://ifzq.gtimg.cn/appstock/app/kline/mkline'
 const TENCENT_MINUTE = 'https://web.ifzq.gtimg.cn/appstock/app/minute/query'
 const TENCENT_QUOTE = 'https://qt.gtimg.cn/q='
 const SINA_KLINE = 'https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/CN_MarketData.getKLineData'
+const THS_KLINE = 'https://d.10jqka.com.cn/v6/line/{symbol}/01/{tail}.js'
 
 const UPSTREAM_HEADERS = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
@@ -91,12 +92,18 @@ export async function fetchTencentKline(
   const count = Math.min(Math.max(Math.trunc(spanDays * 1.5), 30), MAX_COUNT)
   const mode = adjust === 'hfq' ? 'hfq' : adjust === 'qfq' ? 'qfq' : ''
 
-  const url = isHk || kind === 'us' ? TENCENT_KLINE : TENCENT_FQKLINE
-  const param = isHk || kind === 'us'
+  // 美股：fqkline 带日期区间会返回空数组，只能不带日期取最近 N 根再本地过滤；
+  // 港股走 kline/kline（不复权）；A股走 fqkline（支持 qfq/hfq + 日期区间）。
+  const url = isHk ? TENCENT_KLINE : kind === 'us' ? TENCENT_FQKLINE : TENCENT_FQKLINE
+  const param = isHk
     ? `${symbol},day,${startD},${endD},${count}`
-    : mode
-      ? `${symbol},day,${startD},${endD},${count},${mode}`
-      : `${symbol},day,${startD},${endD},${count}`
+    : kind === 'us'
+      ? mode
+        ? `${symbol},day,,,,${count},${mode}`
+        : `${symbol},day,,,${count}`
+      : mode
+        ? `${symbol},day,${startD},${endD},${count},${mode}`
+        : `${symbol},day,${startD},${endD},${count}`
   const payload = (await getJson(`${url}?param=${encodeURIComponent(param)}`, fetcher)) as Record<string, unknown>
   if (payload.code !== 0) throw new Error(`tencent code=${payload.code}`)
   const node = ((payload.data as Record<string, unknown>) || {})[symbol] as Record<string, unknown> | undefined
@@ -143,7 +150,16 @@ export async function fetchSinaKline(code: string, start: string, end: string, _
 /** Tencent -> Sina fallback. Returns null when every upstream failed. */
 export async function fetchServerKline(
   code: string, start: string, end: string, adjust = 'qfq', fetcher: Fetcher = globalThis.fetch,
-): Promise<{ data: ServerKlineRow[]; source: 'tencent' | 'sina' } | null> {
+): Promise<{ data: ServerKlineRow[]; source: 'tencent' | 'sina' | 'ths' } | null> {
+  const resolved = resolveServerSymbol(code)
+  // 北交所：腾讯/新浪都无数据，走同花顺（hs_ 前缀）
+  if (resolved?.symbol.startsWith('bj')) {
+    try {
+      const rows = await fetchThsKline(code, start, end, fetcher)
+      if (rows.length) return { data: rows.slice(-320), source: 'ths' }
+    } catch { /* fallthrough to error below */ }
+    return null
+  }
   for (const [source, upstream] of [['tencent', fetchTencentKline], ['sina', fetchSinaKline]] as const) {
     try {
       const rows = await upstream(code, start, end, adjust, fetcher)
@@ -194,6 +210,39 @@ export async function fetchServerIntraday(code: string, period: '1m' | '5m' | '1
 }
 
 /** Batch realtime quotes via Tencent qt.gtimg.cn. Keyed by requested codes and symbols. */
+/** 同花顺日线（北交所 hs_ 前缀）：JSONP 包裹，data="date,open,high,low,close,volume,amount,amp,..." 分号分隔。 */
+async function fetchThsKline(code: string, start: string, end: string, fetcher: Fetcher): Promise<ServerKlineRow[]> {
+  const resolved = resolveServerSymbol(code)
+  if (!resolved || resolved.kind !== 'cn') return []
+  const symbol = `hs_${resolved.code}`
+  const raw = await getJson(
+    THS_KLINE.replace('{symbol}', symbol).replace('{tail}', 'last.js'),
+    fetcher,
+  ) as Record<string, unknown>
+  const dataStr = String((raw as Record<string, unknown>).data || '')
+  if (!dataStr) return []
+  const startNum = start
+  const endNum = end
+  const out: ServerKlineRow[] = []
+  for (const row of dataStr.split(';')) {
+    const f = row.split(',')
+    if (f.length < 7) continue
+    const dateNum = f[0]!.trim()
+    if (dateNum < startNum || dateNum > endNum) continue
+    const close = Number(f[4])
+    if (!(close > 0)) continue
+    out.push({
+      date: `${dateNum.slice(0, 4)}-${dateNum.slice(4, 6)}-${dateNum.slice(6, 8)}`,
+      open: Number(f[1]),
+      high: Number(f[2]),
+      low: Number(f[3]),
+      close,
+      volume: Number(f[5]),
+    })
+  }
+  return out.sort((a, b) => a.date.localeCompare(b.date))
+}
+
 export async function fetchServerQuotes(codes: string[], fetcher: Fetcher = globalThis.fetch): Promise<Record<string, ServerQuote>> {
   const resolved = codes.map((code) => resolveServerSymbol(code)).filter((r): r is NonNullable<typeof r> => Boolean(r))
   if (resolved.length === 0) return {}

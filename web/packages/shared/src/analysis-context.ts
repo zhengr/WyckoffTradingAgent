@@ -17,7 +17,7 @@ export const ANALYSIS_CONTEXT_PACK_SCHEMA = z.object({
   name: z.string().nullable(),
   generatedAt: z.string(),
   dataQuality: z.object({
-    source: z.enum(['tushare', 'tencent', 'sina', 'mixed', 'none']),
+    source: z.enum(['tushare', 'tencent', 'sina', 'ths', 'mixed', 'none']),
     latestTradingDate: z.string().nullable(),
     coverageStart: z.string().nullable(),
     coverageEnd: z.string().nullable(),

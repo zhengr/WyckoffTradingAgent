@@ -1,5 +1,5 @@
 import { buildKlineDataQuality, isCnSymbol, normalizeTushareCode } from '@wyckoff/shared'
-import type { KlineDataQuality, KlineRow } from '@wyckoff/shared'
+import type { KlineDataSource, KlineDataQuality, KlineRow } from '@wyckoff/shared'
 
 import { supabase } from './supabase'
 
@@ -106,7 +106,7 @@ export async function fetchKlineWithQuality(
   const serverHit = await fetchKlineViaServerApi(code, fmtCompact(start), fmtCompact(end), 'qfq')
   if (serverHit && serverHit.data.length) {
     const data = serverHit.data.slice(-320)
-    const src = serverHit.source === 'sina' ? 'sina' : 'tencent'
+    const src = (serverHit.source === 'sina' || serverHit.source === 'ths' ? serverHit.source : 'tencent') as KlineDataSource
     return { data, quality: buildKlineDataQuality(src, 320, data, Boolean(keys.tushare)) }
   }
   throw new Error(`无法获取K线数据。请检查股票代码或稍后重试（支持 A股6位、00700.HK、AAPL.US）。`)

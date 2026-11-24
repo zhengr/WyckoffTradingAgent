@@ -67,7 +67,7 @@ export interface LLMToolConfig {
   base_url: string
 }
 
-export type KlineDataSource = 'tushare' | 'tencent' | 'sina' | 'mixed' | 'none'
+export type KlineDataSource = 'tushare' | 'tencent' | 'sina' | 'ths' | 'mixed' | 'none'
 
 export interface KlineDataQuality {
   source: KlineDataSource
@@ -111,7 +111,7 @@ export const ANALYZE_STOCK_OUTPUT_SCHEMA = z.object({
   data_source: z.string().nullable().optional(),
   data_asof: z.string().nullable().optional(),
   data_quality: z.object({
-    source: z.enum(['tushare', 'tencent', 'sina', 'mixed', 'none']),
+    source: z.enum(['tushare', 'tencent', 'sina', 'ths', 'mixed', 'none']),
     latestTradingDate: z.string().nullable(),
     coverageStart: z.string().nullable(),
     coverageEnd: z.string().nullable(),
@@ -319,7 +319,7 @@ export async function fetchKlineForAgentWithQuality(
   const serverHit = await fetchServerKline(code, fmt(start), fmt(end), 'qfq', deps.fetch).catch(() => null)
   if (serverHit && serverHit.data.length) {
     const rows = serverHit.data
-    const src: KlineDataSource = serverHit.source === 'sina' ? 'sina' : 'tencent'
+    const src: KlineDataSource = serverHit.source as KlineDataSource
     return { rows, quality: buildKlineDataQuality(src, 320, rows, Boolean(keys.tushare)) }
   }
   return { rows: [], quality: buildKlineDataQuality('none', 320, []) }
@@ -1610,7 +1610,7 @@ export async function execIntradayAnalysis(deps: ToolDeps, _userId: string, code
 }
 
 const SOURCE_LABEL: Record<KlineDataSource, string> = {
-  tushare: 'Tushare', tencent: '腾讯', sina: '新浪', mixed: '多源', none: '无来源',
+  tushare: 'Tushare', tencent: '腾讯', sina: '新浪', ths: '同花顺', mixed: '多源', none: '无来源',
 }
 
 interface IntradayProfileWeb {
