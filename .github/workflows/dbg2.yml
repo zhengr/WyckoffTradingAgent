@@ -1,0 +1,20 @@
+name: Debug upstream urls
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  d:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Exact urls used by market-data.ts
+        run: |
+          echo "--- THS exact (hs_920029 last.js) ---"
+          curl -sS --max-time 20 -H 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' -H 'Referer: https://finance.sina.com.cn' "https://d.10jqka.com.cn/v6/line/hs_920029/01/last.js" | head -c 250; echo
+          echo "--- Tencent US exact (dateless fqkline) ---"
+          curl -sS --max-time 20 -H 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' -H 'Referer: https://finance.sina.com.cn' "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=usAAPL,day,,,,30,qfq" | head -c 250; echo
+          echo "--- Tencent US dateless no mode ---"
+          curl -sS --max-time 20 -H 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=usAAPL,day,,,30" | head -c 250; echo
