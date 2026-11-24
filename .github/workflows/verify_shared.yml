@@ -18,7 +18,7 @@ jobs:
         run: |
           cd web
           npm i -g esbuild > /dev/null 2>&1
-          esbuild packages/shared/src/index.ts --bundle --format=esm --platform=node --outfile=/tmp/shared.mjs --external:@supabase/supabase-js --external:ai --external:zod 2>&1 | tail -3
+          npm i -g esbuild > /dev/null 2>&1; esbuild packages/shared/src/index.ts --bundle --format=esm --platform=node --outfile=/tmp/shared.mjs 2>&1 | tail -3
           echo "bundle done: $(wc -c < /tmp/shared.mjs) bytes"
       - name: Test agent fetch
         run: |
