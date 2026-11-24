@@ -1,0 +1,18 @@
+name: probe em us
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  p:
+    runs-on: ubuntu-latest
+    steps:
+      - name: probe
+        run: |
+          for secid in "105.AAPL" "105.AAPL.OQ" "107.AAPL" "100.AAPL"; do
+            echo "secid=$secid"
+            curl -sS --max-time 20 "https://push2his.eastmoney.com/api/qt/stock/kline/get?secid=$secid&fields1=f1,f2,f3&fields2=f51,f52,f53,f54,f55,f56&klt=101&fqt=1&beg=20261110&end=20261118" | head -c 200; echo
+          done
