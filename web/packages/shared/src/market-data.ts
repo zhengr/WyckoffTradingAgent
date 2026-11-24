@@ -30,7 +30,7 @@ const TENCENT_MKLINE = 'https://ifzq.gtimg.cn/appstock/app/kline/mkline'
 const TENCENT_MINUTE = 'https://web.ifzq.gtimg.cn/appstock/app/minute/query'
 const TENCENT_QUOTE = 'https://qt.gtimg.cn/q='
 const SINA_KLINE = 'https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/CN_MarketData.getKLineData'
-const THS_KLINE = 'https://d.10jqka.com.cn/v6/line/{symbol}/01/{tail}.js'
+const EM_KLINE = 'https://push2his.eastmoney.com/api/qt/stock/kline/get?secid={secid}&fields1=f1,f2,f3&fields2=f51,f52,f53,f54,f55,f56&klt=101&fqt={fqt}&beg={beg}&end={end}'
 
 const UPSTREAM_HEADERS = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
@@ -79,15 +79,6 @@ async function getJson(url: string, fetcher: Fetcher): Promise<unknown> {
 }
 
 /** 同花顺返回 JSONP（quotebridge_v6_line_hs_xxx_01_yyy( {...} )），剥壳后解析。 */
-async function getThsJson(url: string, fetcher: Fetcher): Promise<Record<string, unknown>> {
-  const resp = await fetcher(url, { headers: UPSTREAM_HEADERS, signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS) })
-  if (!resp.ok) throw new Error(`upstream http ${resp.status}`)
-  const text = await resp.text()
-  const start = text.indexOf('(')
-  const end = text.lastIndexOf(')')
-  if (start === -1 || end <= start) throw new Error('ths jsonp format unexpected')
-  return JSON.parse(text.slice(start + 1, end)) as Record<string, unknown>
-}
 
 export async function fetchTencentKline(
   code: string, start: string, end: string, adjust: string, fetcher: Fetcher = globalThis.fetch,
@@ -109,9 +100,7 @@ export async function fetchTencentKline(
   const param = isHk
     ? `${symbol},day,${startD},${endD},${count}`
     : kind === 'us'
-      ? mode
-        ? `${symbol},day,,,,${count},${mode}`
-        : `${symbol},day,,,${count}`
+      ? `${symbol},day,,,${count},${mode || 'qfq'}`
       : mode
         ? `${symbol},day,${startD},${endD},${count},${mode}`
         : `${symbol},day,${startD},${endD},${count}`
@@ -225,39 +214,36 @@ export async function fetchServerIntraday(code: string, period: '1m' | '5m' | '1
 /** Batch realtime quotes via Tencent qt.gtimg.cn. Keyed by requested codes and symbols. */
 /** 同花顺日线（北交所 hs_ 前缀）：JSONP 包裹，按年文件取，data="date,open,high,low,close,volume,amount,amp,..." 分号分隔。 */
 async function fetchThsKline(code: string, start: string, end: string, fetcher: Fetcher): Promise<ServerKlineRow[]> {
+  // 北交所：腾讯/新浪无 K 线。10jqka 在 Worker 出口不可达（ETIMEDOUT），改用东财 push2his。
+  // 东财 klines 字段序：date,open,close,high,low,volume
   const resolved = resolveServerSymbol(code)
   if (!resolved || resolved.kind !== 'cn') return []
-  const symbol = `hs_${resolved.code}`
-  const startNum = start
-  const endNum = end
-  const startYear = Number(start.slice(0, 4))
-  const endYear = Number(end.slice(0, 4))
-  const out: ServerKlineRow[] = []
-  for (let y = startYear; y <= endYear; y++) {
-    const raw = await getThsJson(
-      THS_KLINE.replace('{symbol}', symbol).replace('{tail}', `${y}.js`),
-      fetcher,
-    ) as Record<string, unknown>
-    const dataStr = String((raw as Record<string, unknown>).data || '')
-    if (!dataStr) continue
-    for (const row of dataStr.split(';')) {
-      const f = row.split(',')
-      if (f.length < 7) continue
-      const dateNum = f[0]!.trim()
-      if (dateNum < startNum || dateNum > endNum) continue
-      const close = Number(f[4])
+  const fqt = '1'
+  const url = EM_KLINE
+    .replace('{secid}', `0.${resolved.code}`)
+    .replace('{fqt}', fqt)
+    .replace('{beg}', start)
+    .replace('{end}', end)
+  return (async () => {
+    const payload = (await getJson(url, fetcher)) as { data?: { klines?: string[] } | null }
+    const klines = payload.data?.klines || []
+    const out: ServerKlineRow[] = []
+    for (const line of klines) {
+      const f = line.split(',')
+      if (f.length < 6) continue
+      const close = Number(f[2])
       if (!(close > 0)) continue
       out.push({
-        date: `${dateNum.slice(0, 4)}-${dateNum.slice(4, 6)}-${dateNum.slice(6, 8)}`,
+        date: String(f[0]),
         open: Number(f[1]),
-        high: Number(f[2]),
-        low: Number(f[3]),
         close,
+        high: Number(f[3]),
+        low: Number(f[4]),
         volume: Number(f[5]),
       })
     }
-  }
-  return out.sort((a, b) => a.date.localeCompare(b.date))
+    return out.sort((a, b) => a.date.localeCompare(b.date))
+  })()
 }
 
 export async function fetchServerQuotes(codes: string[], fetcher: Fetcher = globalThis.fetch): Promise<Record<string, ServerQuote>> {

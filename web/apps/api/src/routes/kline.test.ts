@@ -106,12 +106,10 @@ describe('kline route', () => {
       if (url.includes('sina.com.cn')) {
         throw new Error('sina no BSE')
       }
-      if (url.includes('10jqka.com.cn')) {
-        const payload = JSON.stringify({
-          name: '开发科技',
-          data: '20261117,30.21,30.45,30.50,29.90,3265374,237885270.00,2.416;20261118,30.00,30.00,27.98,28.16,8201700,231162100.00,6.84',
+      if (url.includes('push2his.eastmoney.com') && url.includes('920029')) {
+        return jsonResponse({
+          data: { code: '920029', klines: ['2026-11-17,30.21,29.90,30.50,30.21,3265374', '2026-11-18,30.00,28.16,30.00,27.98,8201700'] },
         })
-        return new Response(`quotebridge_v6_line_hs_920029_01_2026(${payload})`, { status: 200, headers: { 'Content-Type': 'text/javascript' } })
       }
       throw new Error('unexpected upstream ' + url)
     })
