@@ -34,6 +34,10 @@ const EM_KLINE = 'https://push2his.eastmoney.com/api/qt/stock/kline/get?secid={s
 
 const UPSTREAM_HEADERS = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+  Referer: 'https://gu.qq.com/',
+}
+const SINA_HEADERS = {
+  'User-Agent': UPSTREAM_HEADERS['User-Agent'],
   Referer: 'https://finance.sina.com.cn',
 }
 const UPSTREAM_TIMEOUT_MS = 15_000
@@ -72,8 +76,8 @@ function toDash(ymd: string): string {
   return `${ymd.slice(0, 4)}-${ymd.slice(4, 6)}-${ymd.slice(6, 8)}`
 }
 
-async function getJson(url: string, fetcher: Fetcher): Promise<unknown> {
-  const resp = await fetcher(url, { headers: UPSTREAM_HEADERS, signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS) })
+async function getJson(url: string, fetcher: Fetcher, headers: Record<string, string> = UPSTREAM_HEADERS): Promise<unknown> {
+  const resp = await fetcher(url, { headers, signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS) })
   if (!resp.ok) throw new Error(`upstream http ${resp.status}`)
   return resp.json()
 }
@@ -134,7 +138,7 @@ export async function fetchSinaKline(code: string, start: string, end: string, _
   const endD = toDash(end)
   const spanDays = Math.ceil((new Date(endD).getTime() - new Date(startD).getTime()) / 86400000) + 2
   const datalen = Math.min(Math.max(Math.trunc(spanDays * 1.5), 30), 1023)
-  const rows = (await getJson(`${SINA_KLINE}?symbol=${symbol}&scale=240&ma=no&datalen=${datalen}`, fetcher)) as Array<Record<string, string>>
+  const rows = (await getJson(`${SINA_KLINE}?symbol=${symbol}&scale=240&ma=no&datalen=${datalen}`, fetcher, SINA_HEADERS)) as Array<Record<string, string>>
   if (!Array.isArray(rows)) return []
   const out: ServerKlineRow[] = []
   for (const r of rows) {
