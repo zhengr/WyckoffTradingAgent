@@ -168,7 +168,10 @@ export async function fetchServerKline(
     try {
       const rows = await upstream(code, start, end, adjust, fetcher)
       if (rows.length) return { data: rows.slice(-320), source }
-    } catch { /* try next */ }
+    } catch (err) {
+      if (typeof console !== 'undefined') console.warn(`[market-data] ${source} kline failed for ${code}:`, err instanceof Error ? err.message : err)
+      if (source === 'tencent' && code.endsWith('.US')) throw new Error(`tencent us: ${err instanceof Error ? err.message : String(err)}`)
+    }
   }
   return null
 }
