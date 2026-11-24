@@ -45,6 +45,6 @@ klineRoutes.get('/', async (c) => {
   }
 
   const hit = await fetchServerKline(code, start, end, adjust)
-  if (!hit) return c.json({ error: 'kline sources failed' }, 502)
+  if (!hit) return c.json({ error: 'kline sources failed', code, adjust }, 502)
   return c.json({ data: hit.data, source: hit.source })
 })

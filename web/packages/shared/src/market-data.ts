@@ -168,7 +168,9 @@ export async function fetchServerKline(
     try {
       const rows = await fetchThsKline(code, start, end, fetcher)
       if (rows.length) return { data: rows.slice(-320), source: 'ths' }
-    } catch { /* fallthrough to error below */ }
+    } catch (err) {
+      if (typeof console !== 'undefined') console.warn('[market-data] ths kline failed:', err instanceof Error ? err.message : err)
+    }
     return null
   }
   for (const [source, upstream] of [['tencent', fetchTencentKline], ['sina', fetchSinaKline]] as const) {
