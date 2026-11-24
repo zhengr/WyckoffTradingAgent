@@ -39,7 +39,7 @@ jobs:
           const editors = await page.evaluate(() => {
             const out = [];
             document.querySelectorAll('textarea, input, [contenteditable=true]').forEach((el) => {
-              out.push({tag: el.tagName, type: (el as HTMLInputElement).type || '', ph: (el as HTMLInputElement).placeholder || '', ce: el.getAttribute('contenteditable')});
+              out.push({tag: el.tagName, type: el.type || '', ph: el.placeholder || '', ce: el.getAttribute('contenteditable')});
             });
             return out;
           });
