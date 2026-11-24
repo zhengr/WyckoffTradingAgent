@@ -154,17 +154,17 @@ export async function fetchSinaKline(code: string, start: string, end: string, _
 /** Tencent -> Sina fallback. Returns null when every upstream failed. */
 export async function fetchServerKline(
   code: string, start: string, end: string, adjust = 'qfq', fetcher: Fetcher = globalThis.fetch,
-): Promise<{ data: ServerKlineRow[]; source: 'tencent' | 'sina' | 'ths' } | null> {
+): Promise<{ data: ServerKlineRow[]; source: 'tencent' | 'sina' | 'ths' | 'eastmoney' } | null> {
   const resolved = resolveServerSymbol(code)
-  // 北交所：腾讯/新浪都无数据，走同花顺（hs_ 前缀）
-  if (resolved?.symbol.startsWith('bj')) {
+  // 北交所 / 美股：腾讯在这些市场返回空或被数据中心 IP 拒绝，走东财 push2his
+  if (resolved?.symbol.startsWith('bj') || resolved?.kind === 'us') {
     try {
       const rows = await fetchThsKline(code, start, end, fetcher)
-      if (rows.length) return { data: rows.slice(-320), source: 'ths' }
+      if (rows.length) return { data: rows.slice(-320), source: resolved.kind === 'us' ? 'eastmoney' : 'ths' }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
-      if (typeof console !== 'undefined') console.warn('[market-data] em bse failed:', msg)
-      throw new Error(`em bse: ${msg}`)
+      if (typeof console !== 'undefined') console.warn('[market-data] em kline failed:', msg)
+      throw new Error(`em kline: ${msg}`)
     }
     return null
   }
@@ -226,10 +226,11 @@ async function fetchThsKline(code: string, start: string, end: string, fetcher: 
   // 北交所：腾讯/新浪无 K 线。10jqka 在 Worker 出口不可达（ETIMEDOUT），改用东财 push2his。
   // 东财 klines 字段序：date,open,close,high,low,volume
   const resolved = resolveServerSymbol(code)
-  if (!resolved || resolved.kind !== 'cn') return []
+  if (!resolved) return []
+  const secid = resolved.kind === 'us' ? `105.${resolved.code.replace('.US', '')}` : `0.${resolved.code}`
   const fqt = '1'
   const url = EM_KLINE
-    .replace('{secid}', `0.${resolved.code}`)
+    .replace('{secid}', secid)
     .replace('{fqt}', fqt)
     .replace('{beg}', start)
     .replace('{end}', end)

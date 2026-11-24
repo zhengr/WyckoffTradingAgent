@@ -129,18 +129,12 @@ describe('kline route', () => {
   it('returns US rows from tencent fqkline without date range', async () => {
     const fetchMock = vi.fn(async (input: string | URL | Request) => {
       const url = String(input)
-      if (url.includes('fqkline') && url.includes('usAAPL')) {
-        // 带日期会空，这里模拟"最近N根"模式的数据
+      if (url.includes('push2his.eastmoney.com') && url.includes('105.AAPL')) {
         return jsonResponse({
-          code: 0,
-          data: {
-            usAAPL: {
-              day: [
-                ['2026-11-10', '350.00', '348.50', '352.00', '347.00', '50000000.000'],
-                ['2026-11-18', '351.94', '352.45', '356.00', '350.00', '58588703.000'],
-              ],
-            },
-          },
+          data: { code: 'AAPL', klines: [
+            '2026-11-10,351.08,348.24,353.60,346.19,29756060',
+            '2026-11-18,351.94,352.45,356.00,350.00,58588703',
+          ] },
         })
       }
       throw new Error('unexpected upstream')
@@ -152,7 +146,7 @@ describe('kline route', () => {
     )
     expect(res.status).toBe(200)
     const body = (await res.json()) as { data: Array<Record<string, number | string>>; source: string }
-    expect(body.source).toBe('tencent')
+    expect(body.source).toBe('eastmoney')
     expect(body.data).toHaveLength(2)
     expect(body.data[1].close).toBeCloseTo(352.45)
   })
