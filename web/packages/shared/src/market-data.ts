@@ -158,7 +158,9 @@ export async function fetchServerKline(
       const rows = await fetchThsKline(code, start, end, fetcher)
       if (rows.length) return { data: rows.slice(-320), source: 'ths' }
     } catch (err) {
-      if (typeof console !== 'undefined') console.warn('[market-data] ths kline failed:', err instanceof Error ? err.message : err)
+      const msg = err instanceof Error ? err.message : String(err)
+      if (typeof console !== 'undefined') console.warn('[market-data] em bse failed:', msg)
+      throw new Error(`em bse: ${msg}`)
     }
     return null
   }

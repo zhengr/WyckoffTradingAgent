@@ -1,4 +1,4 @@
-name: Final endpoint verify
+name: Final verify all markets
 
 on:
   workflow_dispatch:
@@ -10,7 +10,7 @@ jobs:
   v:
     runs-on: ubuntu-latest
     steps:
-      - name: all
+      - name: all markets
         run: |
           W=https://wyckoff-api.zhengr.workers.dev
           for c in "600519" "920029" "AAPL.US" "00700.HK" "510300"; do
@@ -25,5 +25,3 @@ jobs:
               print('  ERROR:', d)
           "
           done
-          echo "=== quote BSE+US ==="
-          curl -sS --max-time 30 "$W/api/quote?code=920029,AAPL.US" | head -c 300; echo

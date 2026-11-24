@@ -44,7 +44,12 @@ klineRoutes.get('/', async (c) => {
     return c.json({ data: rows.slice(-320), source: 'tencent', period })
   }
 
-  const hit = await fetchServerKline(code, start, end, adjust)
+  let hit: Awaited<ReturnType<typeof fetchServerKline>> = null
+  try {
+    hit = await fetchServerKline(code, start, end, adjust)
+  } catch (err) {
+    return c.json({ error: 'kline upstream error', detail: err instanceof Error ? err.message : String(err), code }, 502)
+  }
   if (!hit) return c.json({ error: 'kline sources failed', code, adjust }, 502)
   return c.json({ data: hit.data, source: hit.source })
 })
