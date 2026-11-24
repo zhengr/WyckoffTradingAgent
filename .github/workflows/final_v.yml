@@ -1,0 +1,29 @@
+name: Final endpoint verify
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  v:
+    runs-on: ubuntu-latest
+    steps:
+      - name: all
+        run: |
+          W=https://wyckoff-api.zhengr.workers.dev
+          for c in "600519" "920029" "AAPL.US" "00700.HK" "510300"; do
+            echo "=== $c ==="
+            curl -sS --max-time 40 "$W/api/kline?code=$c&start=20261110&end=20261118&adjust=qfq" -o /tmp/r.json -w 'status=%{http_code}\n'
+            python3 -c "
+          import json
+          d = json.load(open('/tmp/r.json'))
+          if 'data' in d:
+              print('  source:', d.get('source'), '| rows:', len(d['data']), '| last:', d['data'][-1])
+          else:
+              print('  ERROR:', d)
+          "
+          done
+          echo "=== quote BSE+US ==="
+          curl -sS --max-time 30 "$W/api/quote?code=920029,AAPL.US" | head -c 300; echo
