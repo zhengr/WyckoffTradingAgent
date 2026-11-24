@@ -1,0 +1,22 @@
+name: retry us
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  v:
+    runs-on: ubuntu-latest
+    steps:
+      - name: retry 3x
+        run: |
+          W=https://wyckoff-api.zhengr.workers.dev
+          for i in 1 2 3; do
+            echo "=== attempt $i ==="
+            curl -sS --max-time 40 "$W/api/kline?code=AAPL.US&start=20261110&end=20261118&adjust=qfq" | head -c 200; echo
+            sleep 2
+          done
+          echo "=== direct em from runner ==="
+          curl -sS --max-time 20 "https://push2his.eastmoney.com/api/qt/stock/kline/get?secid=105.AAPL&fields1=f1,f2,f3&fields2=f51,f52,f53,f54,f55,f56&klt=101&fqt=1&beg=20261110&end=20261118" | head -c 150; echo
