@@ -1,4 +1,4 @@
-import { MessageSquare, Briefcase, TrendingUp, Settings, BarChart3, FileDown, Crown, Swords, History, Microscope, BookOpen, Ruler, type LucideIcon } from 'lucide-react'
+import { MessageSquare, Briefcase, TrendingUp, Settings, BarChart3, FileDown, Crown, Swords, History, Microscope, BookOpen, Ruler, UserCog, type LucideIcon } from 'lucide-react'
 import type { TranslationKey } from '@/lib/preferences'
 
 export interface AppNavItem {
@@ -46,3 +46,7 @@ export const APP_NAV_GROUPS = [
     ],
   },
 ] as const satisfies readonly AppNavGroup[]
+
+
+/** 管理员专用导航项（按邮箱白名单在 layout 中动态插入）。 */
+export const ADMIN_NAV_ITEM = { to: '/admin', icon: UserCog, labelKey: 'nav.admin' } as const

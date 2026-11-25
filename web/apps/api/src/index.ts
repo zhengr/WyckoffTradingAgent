@@ -1,3 +1,4 @@
+import { adminRoutes } from './routes/admin'
 import { agentLaneRoutes } from './routes/agent-lane'
 import { klineRoutes } from './routes/kline'
 import { agentRunRoutes } from './routes/agent-runs'
@@ -19,6 +20,7 @@ export { RemoteRelay } from './durable/remote-relay'
 
 export const app = createApiApp(missingWorkerRuntimeSecrets)
 app.route('/api/chat', workerChatRoutes)
+app.route('/api/admin', adminRoutes)
 app.route('/api/kline', klineRoutes)
 app.route('/api/agent', agentLaneRoutes)
 app.route('/api/agent-runs', agentRunRoutes)

@@ -1,7 +1,7 @@
 import { Outlet, Link, useLocation, useNavigate } from 'react-router'
 import { useCallback, useEffect, useState } from 'react'
 import { LogOut, Moon, Home, Github, Sun, Languages, PanelLeftClose, PanelLeftOpen, type LucideIcon } from 'lucide-react'
-import { APP_NAV_GROUPS } from '@/lib/app-nav'
+import { ADMIN_NAV_ITEM, APP_NAV_GROUPS, type AppNavItem } from '@/lib/app-nav'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/auth'
 import { MarketBar } from '@/components/market-bar'
@@ -272,9 +272,17 @@ function SidebarHeader({ collapsed, onToggle }: { collapsed: boolean; onToggle: 
 
 function SidebarNavigation({ collapsed, location }: { collapsed: boolean; location: ReturnType<typeof useLocation> }) {
   const { t } = usePreferences()
+  const user = useAuthStore((s) => s.user)
+  const adminEmails = String(import.meta.env.VITE_ADMIN_EMAILS || '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean)
+  const isAdmin = Boolean(user?.email && adminEmails.includes(user.email.toLowerCase()))
+  const groups = isAdmin
+    ? navGroups.map((g, i) => i === navGroups.length - 1
+        ? { ...g, items: [...g.items, ADMIN_NAV_ITEM] }
+        : g)
+    : navGroups
   return (
     <nav className={`min-h-0 flex-1 overflow-y-auto pb-3 ${collapsed ? 'px-2 space-y-0.5' : 'px-3 space-y-3'}`}>
-      {navGroups.map((group) => (
+      {groups.map((group) => (
         <div key={group.titleKey} className={collapsed ? 'space-y-0.5' : 'space-y-1'}>
           {!collapsed && <div className="px-3 pt-3 pb-1 text-[9px] font-extrabold text-muted-foreground/60 uppercase tracking-widest select-none">{t(group.titleKey)}</div>}
           {group.items.map((item) => <SidebarNavLink key={item.to} item={item} collapsed={collapsed} location={location} />)}
@@ -289,7 +297,7 @@ function SidebarNavLink({
   collapsed,
   location,
 }: {
-  item: (typeof navGroups)[number]['items'][number]
+  item: AppNavItem
   collapsed: boolean
   location: ReturnType<typeof useLocation>
 }) {

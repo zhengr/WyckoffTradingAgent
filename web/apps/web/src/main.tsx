@@ -23,6 +23,7 @@ const PortfolioPage = lazy(() => import('@/routes/portfolio').then(m => ({ defau
 const TrackingPage = lazy(() => import('@/routes/tracking').then(m => ({ default: m.TrackingPage })))
 const AttributionPage = lazy(() => import('@/routes/attribution').then(m => ({ default: m.AttributionPage })))
 const SettingsPage = lazy(() => import('@/routes/settings').then(m => ({ default: m.SettingsPage })))
+const AdminPage = lazy(() => import('@/routes/admin').then(m => ({ default: m.AdminPage })))
 const AnalysisPage = lazy(() => import('@/routes/analysis').then(m => ({ default: m.AnalysisPage })))
 const StockBattlePage = lazy(() => import('@/routes/stock-battle').then(m => ({ default: m.StockBattlePage })))
 const HistoryPage = lazy(() => import('@/routes/history').then(m => ({ default: m.HistoryPage })))
@@ -66,6 +67,7 @@ createRoot(document.getElementById('root')!).render(
                   <Route path="/export" element={<ExportPage />} />
                   <Route path="/membership" element={<PlanetMembershipPage />} />
                   <Route path="/settings" element={<SettingsPage />} />
+                <Route path="/admin" element={<AdminPage />} />
                 </Route>
               </Route>
             </Routes>

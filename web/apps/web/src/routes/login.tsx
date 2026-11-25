@@ -163,7 +163,6 @@ interface LoginFieldsProps {
   email: string
   password: string
   rememberEmail: boolean
-  isRegister: boolean
   onEmail: (value: string) => void
   onPassword: (value: string) => void
   onRememberEmail: (value: boolean) => void
@@ -173,7 +172,7 @@ function LoginFields(props: LoginFieldsProps) {
   return (
     <>
       <LoginEmailField value={props.email} onInput={props.onEmail} />
-      <LoginPasswordField value={props.password} isRegister={props.isRegister} onInput={props.onPassword} />
+      <LoginPasswordField value={props.password} onInput={props.onPassword} />
       <RememberEmailCheckbox checked={props.rememberEmail} onChange={props.onRememberEmail} />
     </>
   )
@@ -200,7 +199,7 @@ function LoginEmailField({ value, onInput }: { value: string; onInput: (value: s
   )
 }
 
-function LoginPasswordField({ value, isRegister, onInput }: { value: string; isRegister: boolean; onInput: (value: string) => void }) {
+function LoginPasswordField({ value, onInput }: { value: string; onInput: (value: string) => void }) {
   const { t } = usePreferences()
   const [show, setShow] = useState(false)
   return (
@@ -214,7 +213,7 @@ function LoginPasswordField({ value, isRegister, onInput }: { value: string; isR
           onChange={(e) => onInput(e.target.value)}
           className="w-full rounded-xl border border-border bg-background/60 py-2.5 pl-10 pr-11 text-sm outline-none transition-all duration-200 focus:border-primary focus:bg-background focus:ring-4 focus:ring-primary/10 placeholder:text-muted-foreground/50"
           placeholder="••••••••"
-          autoComplete={isRegister ? 'new-password' : 'current-password'}
+          autoComplete="current-password"
           required
           minLength={6}
         />
@@ -241,28 +240,16 @@ function RememberEmailCheckbox({ checked, onChange }: { checked: boolean; onChan
   )
 }
 
-function LoginSubmit(props: { loading: boolean; isRegister: boolean; error: string }) {
+function LoginSubmit(props: { loading: boolean; error: string }) {
   const { t } = usePreferences()
   return (
     <>
       {props.error && <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-200">{props.error}</p>}
       <button type="submit" disabled={props.loading} className="group flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-primary to-cyan-500 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-primary/25 transition-all hover:shadow-xl hover:shadow-primary/30 disabled:cursor-not-allowed disabled:opacity-60">
-        {props.loading ? t('login.processing') : props.isRegister ? t('login.register') : t('login.submit')}
+        {props.loading ? t('login.processing') : t('login.submit')}
         {!props.loading && <ArrowRight size={16} className="transition-transform group-hover:translate-x-0.5" />}
       </button>
     </>
-  )
-}
-
-function RegisterSwitch(props: { isRegister: boolean; onToggle: () => void }) {
-  const { t } = usePreferences()
-  return (
-    <p className="mt-6 text-center text-sm text-muted-foreground">
-      {props.isRegister ? t('login.hasAccount') : t('login.noAccount')}
-      <button type="button" onClick={props.onToggle} className="ml-1 font-semibold text-primary transition hover:underline">
-        {props.isRegister ? t('login.submit') : t('login.register')}
-      </button>
-    </p>
   )
 }
 
@@ -272,7 +259,6 @@ export function LoginPage() {
   const [email, setEmail] = useState(readRememberedEmail)
   const [password, setPassword] = useState('')
   const [rememberEmail, setRememberEmail] = useState(() => Boolean(readRememberedEmail()))
-  const [isRegister, setIsRegister] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -281,14 +267,9 @@ export function LoginPage() {
     setError('')
     setLoading(true)
     try {
-      if (isRegister) {
-        const { error } = await supabase.auth.signUp({ email, password })
-        if (error) throw error
-      } else {
-        const { data, error } = await supabase.auth.signInWithPassword({ email, password })
-        if (error) throw error
-        if (data.session) setAuth(data.user, data.session)
-      }
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password })
+      if (error) throw error
+      if (data.session) setAuth(data.user, data.session)
       saveRememberedEmail(rememberEmail, email)
       navigate('/', { replace: true })
     } catch (err: unknown) {
@@ -308,10 +289,9 @@ export function LoginPage() {
         <div className="relative z-10 w-full max-w-sm rounded-3xl border border-border/70 bg-card/80 p-8 shadow-2xl shadow-primary/5 backdrop-blur-xl transition-all duration-300 animate-fade-in-up">
           <LoginPageHeader />
           <form onSubmit={handleSubmit} className="space-y-4">
-            <LoginFields email={email} password={password} rememberEmail={rememberEmail} isRegister={isRegister} onEmail={setEmail} onPassword={setPassword} onRememberEmail={setRememberEmail} />
-            <LoginSubmit loading={loading} isRegister={isRegister} error={error} />
+            <LoginFields email={email} password={password} rememberEmail={rememberEmail} onEmail={setEmail} onPassword={setPassword} onRememberEmail={setRememberEmail} />
+            <LoginSubmit loading={loading} error={error} />
           </form>
-          <RegisterSwitch isRegister={isRegister} onToggle={() => { setIsRegister(!isRegister); setError('') }} />
         </div>
       </div>
     </div>
