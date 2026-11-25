@@ -1,0 +1,20 @@
+name: verify admin chunk
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  v:
+    runs-on: ubuntu-latest
+    steps:
+      - name: check
+        run: |
+          B=https://wyckoff-analysis-dyj.pages.dev
+          for p in /chat /settings /membership /admin /analysis; do
+            echo "PAGE_$p=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 15 $B$p)"
+          done
+          echo "CHUNK=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 15 $B/assets/admin-DxFQ9HBG.js)"
+          echo "REDIRECTS=$(curl -sS --max-time 15 $B/_redirects)"
