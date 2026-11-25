@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
-import { ExternalLink, User, ShieldCheck, Database, Brain, Bell, ChevronDown, Eye, EyeOff, PlugZap } from 'lucide-react'
+import { ExternalLink, User, ShieldCheck, Database, Brain, Bell, ChevronDown, Eye, EyeOff, PlugZap, Users } from 'lucide-react'
 import { apiUrl } from '@/lib/api-url'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/auth'
@@ -7,6 +7,7 @@ import { PROVIDERS, PROVIDER_LABELS, PROVIDER_BASE_URLS, PROVIDER_DEFAULT_MODELS
 import type { Provider } from '@wyckoff/shared'
 import { usePreferences } from '@/lib/preferences'
 import { buildSettingsCapabilityRows, summarizeSettingsCapabilities } from '@/lib/settings-capabilities'
+import { AdminPanel } from '@/routes/admin-panel'
 
 interface ProviderConfig {
   api_key: string
@@ -14,7 +15,7 @@ interface ProviderConfig {
   base_url: string
 }
 
-type SettingsTab = 'capability' | 'sources' | 'model' | 'notifications' | 'account'
+type SettingsTab = 'capability' | 'sources' | 'model' | 'notifications' | 'account' | 'admin'
 type SettingsRow = Record<string, unknown>
 type CustomProviderInfo = Record<string, string>
 type TestTarget = 'model' | 'dataSource'
@@ -29,12 +30,20 @@ const SETTINGS_TABS = [
   { id: 'model', labelKey: 'settings.modelConfig', Icon: Brain },
   { id: 'notifications', labelKey: 'settings.notifications', Icon: Bell },
   { id: 'account', labelKey: 'settings.account', Icon: User },
+  { id: 'admin', labelKey: 'settings.admin', Icon: Users },
 ] as const
+
+function isAdminEmail(email: string | undefined): boolean {
+  const allow = String(import.meta.env.VITE_ADMIN_EMAILS || '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean)
+  return Boolean(email && allow.includes(email.toLowerCase()))
+}
 
 export function SettingsPage() {
   const user = useAuthStore((s) => s.user)
   const { t } = usePreferences()
+  const isAdmin = isAdminEmail(user?.email)
   const [activeTab, setActiveTab] = useState<SettingsTab>('capability')
+  const visibleTabs = isAdmin ? SETTINGS_TABS : SETTINGS_TABS.filter((tab) => tab.id !== 'admin')
   const { toast, toastKind, showToast, clearToast } = useSettingsToast()
   const form = useSettingsForm(user?.id, showToast, clearToast)
   const connectivity = useConnectivityTests({
@@ -57,9 +66,10 @@ export function SettingsPage() {
         </h1>
         <SettingsToast toast={toast} kind={toastKind} />
         <div className="flex flex-col md:flex-row gap-6 items-start">
-          <SettingsTabs activeTab={activeTab} onChange={setActiveTab} />
+          <SettingsTabs activeTab={activeTab} onChange={setActiveTab} tabs={visibleTabs} />
           <div className="flex-1 min-w-0 w-full animate-fade-in-up">
             {activeTab === 'account' && user && <AccountPanel email={user.email || ''} id={user.id} />}
+            {activeTab === 'admin' && isAdmin && <AdminPanel />}
             {activeTab === 'capability' && (
               <CapabilityPanel
                 rows={form.settingsCapabilities}
@@ -334,11 +344,11 @@ function SettingsToast({ toast, kind }: { toast: string; kind: 'success' | 'erro
   return <div className={`mb-6 rounded-xl px-4 py-3 text-sm shadow-sm transition-all border ${toneClass}`}>{toast}</div>
 }
 
-function SettingsTabs({ activeTab, onChange }: { activeTab: SettingsTab; onChange: (tab: SettingsTab) => void }) {
+function SettingsTabs({ activeTab, onChange, tabs }: { activeTab: SettingsTab; onChange: (tab: SettingsTab) => void; tabs: readonly typeof SETTINGS_TABS[number][] }) {
   const { t } = usePreferences()
   return (
     <div className="flex w-full shrink-0 flex-row gap-1 overflow-auto border-b border-border pb-3 md:w-56 md:flex-col md:border-b-0 md:border-r md:pb-0 md:pr-4" role="tablist" aria-label={t('settings.title')}>
-      {SETTINGS_TABS.map(({ id, labelKey, Icon }) => {
+      {tabs.map(({ id, labelKey, Icon }) => {
         const active = activeTab === id
         return (
           <button
