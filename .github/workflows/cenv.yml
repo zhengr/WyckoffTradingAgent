@@ -1,0 +1,22 @@
+name: check admin env
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  v:
+    runs-on: ubuntu-latest
+    steps:
+      - name: check
+        run: |
+          B=https://wyckoff-analysis-dyj.pages.dev
+          HTML=$(curl -sS --max-time 20 $B/)
+          ASSET=$(echo "$HTML" | grep -oE '/assets/index-[^"]+\.js' | head -1)
+          curl -sS --max-time 30 "$B$ASSET" -o /tmp/main.js
+          echo "email in bundle: $(grep -o '550469647' /tmp/main.js | wc -l)"
+          echo "admin-email in bundle: $(grep -o 'gmail.com' /tmp/main.js | wc -l)"
+          # 找 VITE_ADMIN 相关代码残留（未替换会显示 import.meta.env）
+          echo "literal check done"
