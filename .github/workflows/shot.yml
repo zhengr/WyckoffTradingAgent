@@ -1,0 +1,42 @@
+name: Screenshot login
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  shot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: Setup playwright
+        run: mkdir -p /tmp/ps && cd /tmp/ps && npm init -y > /dev/null && npm i playwright@1.49.0 > /dev/null 2>&1 && npx playwright install --with-deps chromium > /dev/null 2>&1
+      - name: Screenshot
+        run: |
+          cat > /tmp/ps/s.mjs << 'EOF'
+          import { chromium } from 'playwright';
+          const browser = await chromium.launch();
+          // desktop
+          const p1 = await browser.newPage({viewport:{width:1440,height:900}});
+          await p1.goto('https://wyckoff-analysis-dyj.pages.dev/login', {waitUntil:'networkidle', timeout:45000});
+          await p1.waitForTimeout(1500);
+          await p1.screenshot({path:'/tmp/login-desktop.png', fullPage:true});
+          console.log('desktop title:', await p1.title());
+          console.log('desktop body:', JSON.stringify((await p1.evaluate(()=>document.body.innerText)).slice(0,400)));
+          // mobile
+          const p2 = await browser.newPage({viewport:{width:390,height:844}});
+          await p2.goto('https://wyckoff-analysis-dyj.pages.dev/login', {waitUntil:'networkidle', timeout:45000});
+          await p2.waitForTimeout(1000);
+          await p2.screenshot({path:'/tmp/login-mobile.png', fullPage:true});
+          await browser.close();
+          EOF
+          node /tmp/ps/s.mjs
+          echo "sizes:"; ls -la /tmp/login-*.png
+      - name: Upload screenshots
+        uses: actions/upload-artifact@v4
+        with:
+          name: login-screenshots
+          path: /tmp/login-*.png
