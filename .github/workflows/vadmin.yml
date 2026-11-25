@@ -1,0 +1,27 @@
+name: Verify admin
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  v:
+    runs-on: ubuntu-latest
+    steps:
+      - name: admin api boundaries
+        run: |
+          W=https://wyckoff-api.zhengr.workers.dev
+          echo "--- no token (expect 401) ---"
+          curl -sS --max-time 30 -o /tmp/r -w 'status=%{http_code}\n' "$W/api/admin/users"; cat /tmp/r; echo
+          echo "--- fake token (expect 401/500) ---"
+          curl -sS --max-time 30 -o /tmp/r -w 'status=%{http_code}\n' -H 'Authorization: Bearer fake' "$W/api/admin/users"; cat /tmp/r; echo
+          echo "--- admin page html ---"
+          curl -sS --max-time 20 -o /dev/null -w 'admin page=%{http_code}\n' "https://wyckoff-analysis-dyj.pages.dev/admin"
+          echo "--- login has no register ---"
+          curl -sS --max-time 20 "https://wyckoff-analysis-dyj.pages.dev/login" -o /tmp/l -w 'login=%{http_code}\n'
+          echo "register text count (from JS bundle):"
+          HTML=$(cat /tmp/l); ASSET=$(echo "$HTML" | grep -oE '/assets/index-[^"]+\.js' | head -1)
+          curl -sS --max-time 30 "https://wyckoff-analysis-dyj.pages.dev$ASSET" -o /tmp/m.js
+          echo "noAccount key in bundle: $(grep -o 'login.noAccount' /tmp/m.js | wc -l)"
