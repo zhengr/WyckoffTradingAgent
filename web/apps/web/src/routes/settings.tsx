@@ -33,8 +33,13 @@ const SETTINGS_TABS = [
   { id: 'admin', labelKey: 'settings.admin', Icon: Users },
 ] as const
 
+// 管理员邮箱白名单：direct upload 构建时 Pages 项目级 env 不注入，故内置兜底值。
+// 真正的安全边界在 Worker /api/admin/* 的 ADMIN_EMAILS secret 鉴权，前端此判断只控制 tab 显示。
+const BUILTIN_ADMIN_EMAILS = 'skr5wo7hb@mozmail.com'
 function isAdminEmail(email: string | undefined): boolean {
-  const allow = String(import.meta.env.VITE_ADMIN_EMAILS || '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean)
+  const configured = String(import.meta.env.VITE_ADMIN_EMAILS || '').trim()
+  const raw = configured || BUILTIN_ADMIN_EMAILS
+  const allow = raw.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean)
   return Boolean(email && allow.includes(email.toLowerCase()))
 }
 
