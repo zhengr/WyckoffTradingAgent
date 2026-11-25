@@ -1,0 +1,23 @@
+name: verify email in bundle
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  v:
+    runs-on: ubuntu-latest
+    steps:
+      - name: check
+        run: |
+          B=https://wyckoff-analysis-dyj.pages.dev
+          HTML=$(curl -sS --max-time 20 $B/)
+          # 找所有 js chunk，grep gmail
+          for a in $(echo "$HTML" | grep -oE '/assets/[^"]+\.js' | head -30); do
+            curl -sS --max-time 30 "$B$a" -o /tmp/c.js 2>/dev/null
+            N=$(grep -o 'gmail.com' /tmp/c.js | wc -l)
+            if [ "$N" -gt 0 ]; then echo "FOUND in $a: $N"; fi
+          done
+          echo "DONE"
