@@ -3,6 +3,7 @@ export const DEFAULT_WORKER_ORIGIN = 'https://wyckoff-api.zhengr.workers.dev'
 export const WORKER_PROXY_PREFIXES = [
   '/api/chat',
   '/api/kline',
+  '/api/admin',
   '/api/settings',
   '/api/portfolio',
   '/api/shadow-ledger',
