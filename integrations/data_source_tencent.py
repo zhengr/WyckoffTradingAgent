@@ -77,8 +77,9 @@ def fetch_stock_tencent(symbol: str, start: str, end: str, adjust: str) -> pd.Da
 
 def _request_kline(code: str, mode: str, start_d: str, end_d: str, count: int) -> list[list]:
     if code.startswith("bj"):
-        # 腾讯 fqkline 对北交所只返回当天一行，历史日线走东财 push2his（海外可达，fqt=1 前复权）
-        return _request_bse_kline(code, mode, start_d, end_d)
+        # 腾讯 fqkline 对北交所只返回当天一行；push2his 在海外 CI 并发下会被掐连接，
+        # 直接抛异常落到链尾的 sina（sina kline 支持 bj 前缀且海外可达）
+        raise RuntimeError("tencent no BSE kline; defer to sina")
     if code.startswith("hk"):
         return _request_hk_kline(code, start_d, end_d, count)
     param = f"{code},day,{start_d},{end_d},{count},{mode}" if mode else f"{code},day,{start_d},{end_d},{count}"

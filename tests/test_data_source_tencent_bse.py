@@ -1,7 +1,10 @@
 from __future__ import annotations
 
-"""腾讯数据源北交所分支：fqkline 只返回当天，历史日线走东财 push2his。"""
+"""腾讯数据源北交所分支：fqkline 只返回当天，bj 直接抛异常落到 sina。"""
 
+import pytest
+
+from integrations import data_source_sina
 from integrations import data_source_tencent as tencent
 
 
@@ -16,42 +19,18 @@ class _Resp:
         return self._payload
 
 
-def _em_payload() -> dict:
-    return {
-        "rc": 0,
-        "data": {
-            "code": "920029",
-            "klines": [
-                "2026-11-24,25.0,24.8,25.2,24.7,10,5000000",
-                "2026-11-25,24.8,24.66,25.78,24.40,6485,16000000",
-                "2026-11-26,24.9,25.0,25.53,24.65,5930,14800000",
-            ],
-        },
-    }
+def test_bse_deferred_to_sina_via_raise():
+    # tencent 对 bj 必须抛异常，让源链落到 sina
+    with pytest.raises(RuntimeError, match="defer to sina"):
+        tencent._request_kline("bj920029", "qfq", "2026-11-01", "2026-11-26", 100)
 
 
-def test_bse_kline_falls_back_to_eastmoney_push2his(monkeypatch):
-    calls = []
-
-    def fake_get(url, params=None, headers=None, timeout=None):
-        calls.append(url)
-        assert "push2his.eastmoney.com" in url
-        assert params["secid"] == "0.920029"
-        assert params["klt"] == "101"
-        assert params["fqt"] == "1"  # qfq -> 前复权
-        return _Resp(_em_payload())
-
-    monkeypatch.setattr(tencent.requests, "get", fake_get)
-
-    df = tencent.fetch_stock_tencent("920029", "20261124", "20261126", "qfq")
-
-    assert calls, "BSE must use eastmoney push2his"
-    assert len(df) == 3
-    assert list(df["日期"]) == ["2026-11-24", "2026-11-25", "2026-11-26"]
-    # push2his 与腾讯一样，volume 单位是手，统一转成股
-    assert float(df["成交量"].iloc[-1]) == 593000.0  # 5930 手 * 100
-    # 成交额来自 f57
-    assert float(df["成交额"].iloc[-1]) == 14800000.0
+def test_sina_maps_bse_prefixes_to_bj():
+    assert data_source_sina._sina_symbol("920029") == "bj920029"
+    assert data_source_sina._sina_symbol("430047") == "bj430047"
+    assert data_source_sina._sina_symbol("830799") == "bj830799"
+    assert data_source_sina._sina_symbol("600519") == "sh600519"
+    assert data_source_sina._sina_symbol("000001") == "sz000001"
 
 
 def test_a_share_kline_keeps_tencent_and_amount_na(monkeypatch):

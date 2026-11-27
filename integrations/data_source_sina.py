@@ -91,6 +91,8 @@ def _prefix_for(digits: str) -> str:
     )
     if digits.startswith(sh_prefix) and len(digits) == 6:
         return f"sh{digits}"
+    if digits.startswith(("43", "83", "87", "92")) and len(digits) == 6:
+        return f"bj{digits}"  # 北交所：sina kline 接口支持 bj 前缀（海外可达）
     return f"sz{digits}"
 
 
