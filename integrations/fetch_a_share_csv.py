@@ -65,6 +65,26 @@ def _write_trade_dates_cache(cache_path: Path, dates: list[date]) -> None:
         logger.debug("failed to write trade dates cache", exc_info=True)
 
 
+def _fetch_trade_dates_tencent() -> list[date]:
+    """用上证指数日线日期推交易日历（腾讯无限频、海外 CI 可达），作为 tushare/akshare 的兜底。"""
+    import requests
+
+    resp = requests.get(
+        "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get",
+        params={"param": "sh000001,day,,,1200,"},
+        headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"},
+        timeout=15,
+    )
+    resp.raise_for_status()
+    payload = resp.json()
+    node = ((payload.get("data") or {}).get("sh000001")) or {}
+    rows = node.get("qfqday") or node.get("day") or []
+    dates = sorted({r[0] for r in rows if r and len(str(r[0])) == 10})
+    if not dates:
+        raise RuntimeError("tencent trade calendar empty")
+    return [pd.to_datetime(d).date() for d in dates]
+
+
 def _fetch_trade_dates_akshare() -> list[date]:
     df = ak.tool_trade_date_hist_sina()
     if df is None or df.empty:
@@ -111,6 +131,14 @@ def _fetch_trade_dates_from_sources(cache_path: Path) -> tuple[list[date], Excep
     last_err: Exception | None = None
     try:
         dates = _fetch_trade_dates_tushare()
+        if dates:
+            _write_trade_dates_cache(cache_path, dates)
+            return dates, None
+    except Exception as exc:
+        last_err = exc
+
+    try:
+        dates = _fetch_trade_dates_tencent()
         if dates:
             _write_trade_dates_cache(cache_path, dates)
             return dates, None

@@ -58,3 +58,30 @@ def test_a_share_kline_keeps_tencent_and_amount_na(monkeypatch):
     assert len(df) == 2
     assert df["成交额"].isna().all()  # 腾讯 A 股无成交额，保持 NA
     assert float(df["成交量"].iloc[-1]) == 40000.0 * 100.0  # 手转股
+
+
+def test_tencent_trade_calendar_from_index_kline(monkeypatch):
+    import requests as _rq
+
+    from integrations import fetch_a_share_csv as fasc
+
+    class _R:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {
+                "code": 0,
+                "data": {
+                    "sh000001": {
+                        "qfqday": [
+                            ["2026-11-25", "1", "2", "3", "2", "100"],
+                            ["2026-11-26", "1", "2", "3", "2", "100"],
+                        ]
+                    }
+                },
+            }
+
+    monkeypatch.setattr(_rq, "get", lambda *a, **k: _R())
+    dates = fasc._fetch_trade_dates_tencent()
+    assert [d.isoformat() for d in dates] == ["2026-11-25", "2026-11-26"]
