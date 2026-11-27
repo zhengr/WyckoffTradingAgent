@@ -64,8 +64,9 @@ def fetch_stock_tencent(symbol: str, start: str, end: str, adjust: str) -> pd.Da
     else:
         raise RuntimeError(f"tencent retry exhausted: {last_error}")
 
-    frame = pd.DataFrame(rows, columns=["date", "open", "close", "high", "low", "volume"])
-    for col in ("open", "close", "high", "low", "volume"):
+    rows = [(list(r) + [""])[:7] for r in rows]
+    frame = pd.DataFrame(rows, columns=["date", "open", "close", "high", "low", "volume", "amount"])
+    for col in ("open", "close", "high", "low", "volume", "amount"):
         frame[col] = pd.to_numeric(frame[col], errors="coerce")
     frame["date"] = frame["date"].astype(str)
     frame = frame[(frame["date"] >= start_d) & (frame["date"] <= end_d)]
@@ -76,7 +77,8 @@ def fetch_stock_tencent(symbol: str, start: str, end: str, adjust: str) -> pd.Da
 
 def _request_kline(code: str, mode: str, start_d: str, end_d: str, count: int) -> list[list]:
     if code.startswith("bj"):
-        raise RuntimeError("tencent no BSE kline")
+        # 腾讯 fqkline 对北交所只返回当天一行，历史日线走东财 push2his（海外可达，fqt=1 前复权）
+        return _request_bse_kline(code, mode, start_d, end_d)
     if code.startswith("hk"):
         return _request_hk_kline(code, start_d, end_d, count)
     param = f"{code},day,{start_d},{end_d},{count},{mode}" if mode else f"{code},day,{start_d},{end_d},{count}"
@@ -91,6 +93,42 @@ def _request_kline(code: str, mode: str, start_d: str, end_d: str, count: int) -
         if rows:
             return rows
     raise RuntimeError("tencent no kline rows")
+
+
+_BSE_KLINE_URL = "https://push2his.eastmoney.com/api/qt/stock/kline/get"
+
+
+def _request_bse_kline(code: str, mode: str, start_d: str, end_d: str) -> list[list]:
+    """北交所日线：东财 push2his，klines 顺序为 date,open,close,high,low,volume,amount,..."""
+    fqt = {"qfq": "1", "hfq": "2"}.get(mode, "0")
+    resp = requests.get(
+        _BSE_KLINE_URL,
+        params={
+            "secid": f"0.{code[2:]}",
+            "fields1": "f1,f2,f3,f4,f5,f6",
+            "fields2": "f51,f52,f53,f54,f55,f56,f57,f58",
+            "klt": "101",
+            "fqt": fqt,
+            "beg": start_d.replace("-", ""),
+            "end": end_d.replace("-", ""),
+        },
+        headers={**_HEADERS, "Referer": "https://quote.eastmoney.com/"},
+        timeout=_TIMEOUT_SECONDS,
+    )
+    resp.raise_for_status()
+    payload = resp.json()
+    if payload.get("rc") != 0:
+        raise RuntimeError(f"eastmoney bse rc={payload.get('rc')}")
+    klines = ((payload.get("data") or {}).get("klines")) or []
+    rows = []
+    for item in klines:
+        parts = str(item).split(",")
+        if len(parts) < 6:
+            continue
+        rows.append((parts + [""])[:7])
+    if not rows:
+        raise RuntimeError("eastmoney bse no kline rows")
+    return rows
 
 
 def _request_hk_kline(code: str, start_d: str, end_d: str, count: int) -> list[list]:
@@ -145,9 +183,9 @@ def _to_stock_hist_frame(frame: pd.DataFrame) -> pd.DataFrame:
             "最高": frame["high"],
             "最低": frame["low"],
             "收盘": close,
-            # 腾讯 volume 单位是手（A股 1 手 = 100 股），转成股与其它源对齐
+            # 腾讯/push2his volume 单位都是手（1 手 = 100 股），转成股与其它源对齐
             "成交量": frame["volume"] * 100.0,
-            "成交额": pd.NA,
+            "成交额": frame["amount"] if "amount" in frame.columns else pd.NA,
             "涨跌幅": pct,
             "换手率": pd.NA,
             "振幅": (frame["high"] - frame["low"]) / prev_ref * 100.0,
