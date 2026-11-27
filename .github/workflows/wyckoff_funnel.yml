@@ -63,6 +63,13 @@ jobs:
       EFFICIENCY_MODEL: ${{ secrets.EFFICIENCY_MODEL }}
       EFFICIENCY_BASE_URL: ${{ secrets.EFFICIENCY_BASE_URL }}
       TUSHARE_TOKEN: ${{ secrets.TUSHARE_TOKEN }}
+      # 海外 runner 上 tushare 免费档限频(daily 50次/分钟, adj_factor 1次/分钟),
+      # 全市场逐只拉会触发 420s batch 超时。CI 上禁用付费/慢速源,
+      # 源链只走 tencent+sina(无限频, fqkline 自带前复权); 成交额由 tdx 盘后包补。
+      DATA_SOURCE_DISABLE_TUSHARE: "1"
+      DATA_SOURCE_DISABLE_AKSHARE: "1"
+      DATA_SOURCE_DISABLE_BAOSTOCK: "1"
+      DATA_SOURCE_DISABLE_EFINANCE: "1"
       MY_PORTFOLIO_STATE: ${{ secrets.MY_PORTFOLIO_STATE }}
       TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
       TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}

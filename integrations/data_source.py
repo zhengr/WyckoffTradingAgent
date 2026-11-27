@@ -85,6 +85,9 @@ def _try_hk_us(ctx: StockHistFetchContext) -> pd.DataFrame | None:
 
 
 def _try_tushare(ctx: StockHistFetchContext) -> pd.DataFrame | None:
+    if _env_flag("DATA_SOURCE_DISABLE_TUSHARE"):
+        ctx.failed_details.append("tushare=disabled_by_env")
+        return None
     try:
         df = integrations.data_source_tushare.fetch_stock_tushare(ctx.symbol, ctx.start_s, ctx.end_s)
         return _fallback_output(ctx, df, "tushare")
