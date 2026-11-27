@@ -48,6 +48,14 @@ create table if not exists public.signal_observations (
   candidate_status text,
   lifecycle_status text default 'ACTIVE',
   features_json jsonb,
+  springboard_grade text,
+  springboard_met_count integer,
+  springboard_a text,
+  springboard_b text,
+  springboard_c text,
+  springboard_support text,
+  springboard_touch_count integer,
+  springboard_evidence jsonb,
   updated_at timestamptz default now(),
   unique (market, trade_date, code, signal_type)
 )

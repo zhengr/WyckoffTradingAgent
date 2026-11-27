@@ -71,9 +71,8 @@ def _springboard_observation_fields(
     code: str,
     springboard_map: dict[str, dict[str, Any]] | None,
 ) -> dict[str, Any]:
-    fields = (springboard_map or {}).get(f"{signal_type}:{code}") or (springboard_map or {}).get(code)
-    if not fields:
-        return {}
+    fields = (springboard_map or {}).get(f"{signal_type}:{code}") or (springboard_map or {}).get(code) or {}
+    # 始终返回全键（缺省 None/null)：同一批 upsert 的行必须键集一致，否则 PostgREST 报 PGRST102
     return {
         "springboard_grade": fields.get("springboard_grade"),
         "springboard_met_count": fields.get("springboard_met_count"),
