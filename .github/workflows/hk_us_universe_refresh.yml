@@ -5,8 +5,8 @@ name: Refresh HK US Universe
 # 刷新脚本成功且 data/market_universes/ 有差异时直接提交并推送 main；
 # 名单过短时脚本拒绝覆盖（非 0 退出），本工作流不提交、不开分支、不开 PR。没有差异则干净退出。
 on:
-  schedule:
-    - cron: "30 13 * * 0" # 周日 21:30 北京时间，有意避开工作日港股/美股漏斗
+  # schedule:
+    # - cron: "30 13 * * 0" # 周日 21:30 北京时间，有意避开工作日港股/美股漏斗
   workflow_dispatch:
 
 permissions:
